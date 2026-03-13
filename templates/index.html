@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoiceOver Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-deep: #07070c;
+  --bg-panel: #0e0e16;
+  --bg-card: #141420;
+  --bg-elevated: #1a1a2a;
+  --border: #1e1e32;
+  --border-glow: #2a2a44;
+  --text-primary: #e8e6f0;
+  --text-secondary: #8886a0;
+  --text-dim: #55536e;
+  --accent: #d4a039;
+  --accent-glow: #e8b84d;
+  --accent-dim: #9a7428;
+  --green: #3dd68c;
+  --green-dim: #1a4a35;
+  --red: #e05555;
+  --blue: #5588dd;
+  --step-pending: #2a2a3a;
+  --step-active: #d4a039;
+  --step-done: #3dd68c;
+}
+
+html { font-size: 16px; }
+
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: 'Noto Sans SC', 'JetBrains Mono', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background:
+    radial-gradient(ellipse at 20% 20%, rgba(212,160,57,0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(61,214,140,0.02) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(85,88,221,0.02) 0%, transparent 60%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  z-index: 1;
+  pointer-events: none;
+}
+
+.container {
+  position: relative;
+  z-index: 2;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+}
+
+/* ─── Lang Switcher ─── */
+.lang-switcher {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  z-index: 10;
+  display: flex;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  opacity: 0;
+  animation: fadeUp 0.6s ease forwards 0.1s;
+}
+
+.lang-btn {
+  padding: 7px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.lang-btn:first-child { border-right: 1px solid var(--border); }
+
+.lang-btn.active {
+  color: var(--accent);
+  background: rgba(212,160,57,0.08);
+}
+
+.lang-btn:hover:not(.active) {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.03);
+}
+
+/* ─── Header ─── */
+.header {
+  text-align: center;
+  margin-bottom: 56px;
+}
+
+.header .eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 16px;
+  opacity: 0;
+  animation: fadeUp 0.8s ease forwards 0.1s;
+}
+
+.header h1 {
+  font-family: 'Instrument Serif', serif;
+  font-size: 3.2rem;
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  opacity: 0;
+  animation: fadeUp 0.8s ease forwards 0.25s;
+}
+
+.header h1 em {
+  font-style: italic;
+  color: var(--accent);
+}
+
+.header .subtitle {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  margin-top: 12px;
+  font-weight: 300;
+  opacity: 0;
+  animation: fadeUp 0.8s ease forwards 0.4s;
+}
+
+/* ─── Input Panel ─── */
+.input-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px;
+  margin-bottom: 40px;
+  opacity: 0;
+  animation: fadeUp 0.8s ease forwards 0.55s;
+  position: relative;
+  overflow: hidden;
+}
+
+.input-panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-dim), transparent);
+}
+
+.url-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.url-input {
+  flex: 1;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.url-input::placeholder {
+  color: var(--text-dim);
+  font-family: 'Noto Sans SC', sans-serif;
+}
+
+.url-input:focus {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 3px rgba(212,160,57,0.08);
+}
+
+.btn-start {
+  background: linear-gradient(135deg, var(--accent), var(--accent-glow));
+  color: var(--bg-deep);
+  border: none;
+  border-radius: 10px;
+  padding: 14px 32px;
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-start::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.15));
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.btn-start:hover::after { opacity: 1; }
+.btn-start:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(212,160,57,0.25); }
+.btn-start:active { transform: translateY(0); }
+.btn-start:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* ─── Options Row ─── */
+.options-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+.option-group label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.option-group select {
+  width: 100%;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-family: 'Noto Sans SC', sans-serif;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%238886a0' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: border-color 0.3s;
+}
+
+.option-group select:focus { border-color: var(--accent-dim); }
+
+/* ─── Pipeline Visualizer ─── */
+.pipeline-section {
+  margin-bottom: 40px;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.pipeline-section.visible { opacity: 1; }
+
+.section-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 20px;
+}
+
+.pipeline-track {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 24px 0;
+}
+
+.pipeline-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+}
+
+.node-dot {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 2px solid var(--step-pending);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  z-index: 2;
+}
+
+.node-dot svg {
+  width: 16px; height: 16px;
+  stroke: var(--text-dim);
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.4s;
+}
+
+.pipeline-node.active .node-dot {
+  border-color: var(--step-active);
+  background: rgba(212,160,57,0.1);
+  box-shadow: 0 0 20px rgba(212,160,57,0.2), 0 0 40px rgba(212,160,57,0.05);
+  animation: nodePulse 2s ease-in-out infinite;
+}
+.pipeline-node.active .node-dot svg { stroke: var(--accent); }
+
+.pipeline-node.done .node-dot {
+  border-color: var(--step-done);
+  background: rgba(61,214,140,0.1);
+  box-shadow: 0 0 12px rgba(61,214,140,0.15);
+}
+.pipeline-node.done .node-dot svg { stroke: var(--green); }
+
+.pipeline-node.error .node-dot {
+  border-color: var(--red);
+  background: rgba(224,85,85,0.1);
+}
+
+.node-label {
+  margin-top: 12px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-weight: 400;
+  transition: color 0.4s;
+  text-align: center;
+}
+
+.pipeline-node.active .node-label { color: var(--accent); font-weight: 500; }
+.pipeline-node.done .node-label { color: var(--green); }
+
+.node-time {
+  margin-top: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+
+.pipeline-node.done .node-time { opacity: 1; }
+
+.pipeline-connector {
+  flex: 0 0 1px;
+  height: 2px;
+  background: var(--border);
+  flex-grow: 0.5;
+  margin-top: -28px;
+  transition: background 0.5s;
+  position: relative;
+}
+
+.pipeline-connector.done { background: var(--green); box-shadow: 0 0 8px rgba(61,214,140,0.3); }
+.pipeline-connector.active { background: linear-gradient(90deg, var(--green), var(--accent)); animation: connectorGlow 1.5s ease-in-out infinite alternate; }
+
+/* ─── Log Console ─── */
+.console-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 32px;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.console-panel.visible { opacity: 1; }
+
+.console-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+
+.console-dot { width: 8px; height: 8px; border-radius: 50%; }
+.console-dot.red { background: #e05555; }
+.console-dot.yellow { background: var(--accent); }
+.console-dot.green { background: var(--green); }
+
+.console-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+}
+
+.console-body {
+  padding: 16px 18px;
+  max-height: 280px;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.console-body::-webkit-scrollbar { width: 5px; }
+.console-body::-webkit-scrollbar-track { background: transparent; }
+.console-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.log-line { opacity: 0; animation: logIn 0.3s ease forwards; }
+.log-line .timestamp { color: var(--text-dim); margin-right: 8px; }
+.log-line.info { color: var(--text-secondary); }
+.log-line.success { color: var(--green); }
+.log-line.error { color: var(--red); }
+.log-line.accent { color: var(--accent); }
+
+/* ─── Result Panel ─── */
+.result-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--green-dim);
+  border-radius: 16px;
+  padding: 32px;
+  text-align: center;
+  display: none;
+  animation: fadeUp 0.6s ease;
+}
+
+.result-panel.visible { display: block; }
+
+.result-panel .result-icon {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  background: rgba(61,214,140,0.1);
+  border: 2px solid var(--green);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.result-panel .result-icon svg { width: 24px; height: 24px; stroke: var(--green); fill: none; stroke-width: 2; }
+
+.result-panel h3 {
+  font-family: 'Instrument Serif', serif;
+  font-size: 1.6rem;
+  font-weight: 400;
+  margin-bottom: 8px;
+}
+
+.result-panel p { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 24px; }
+
+.btn-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(61,214,140,0.1);
+  color: var(--green);
+  border: 1px solid var(--green-dim);
+  border-radius: 10px;
+  padding: 12px 28px;
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-decoration: none;
+}
+
+.btn-download:hover { background: rgba(61,214,140,0.18); box-shadow: 0 4px 20px rgba(61,214,140,0.15); transform: translateY(-1px); }
+.btn-download svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+/* ─── Error State ─── */
+.error-panel {
+  background: var(--bg-panel);
+  border: 1px solid rgba(224,85,85,0.3);
+  border-radius: 12px;
+  padding: 24px;
+  display: none;
+  animation: fadeUp 0.5s ease;
+}
+
+.error-panel.visible { display: block; }
+.error-panel .error-msg { color: var(--red); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; word-break: break-all; }
+
+/* ─── Footer ─── */
+.footer {
+  text-align: center;
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.footer p {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+}
+
+/* ─── Animations ─── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes nodePulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(212,160,57,0.2); }
+  50% { box-shadow: 0 0 30px rgba(212,160,57,0.35), 0 0 60px rgba(212,160,57,0.1); }
+}
+
+@keyframes connectorGlow {
+  from { box-shadow: 0 0 4px rgba(212,160,57,0.2); }
+  to { box-shadow: 0 0 10px rgba(212,160,57,0.4); }
+}
+
+@keyframes logIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.spinner {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid var(--accent-dim);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 640px) {
+  .header h1 { font-size: 2.2rem; }
+  .options-row { grid-template-columns: 1fr; }
+  .url-row { flex-direction: column; }
+  .pipeline-track { flex-wrap: wrap; justify-content: center; }
+  .pipeline-connector { display: none; }
+  .pipeline-node { flex: 0 0 30%; margin-bottom: 16px; }
+  .lang-switcher { top: 12px; right: 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Language Switcher -->
+<div class="lang-switcher">
+  <button class="lang-btn active" id="langZh" onclick="switchLang('zh')">CN</button>
+  <button class="lang-btn" id="langEn" onclick="switchLang('en')">EN</button>
+</div>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="eyebrow">VoiceOver Studio</div>
+    <h1 id="mainTitle">YouTube <em>English</em> to Chinese<br>Dubbing Pipeline</h1>
+    <p class="subtitle" id="subtitle">AI-powered video dubbing with voice separation, transcription, and synthesis</p>
+  </div>
+
+  <!-- Input Panel -->
+  <div class="input-panel">
+    <div class="url-row">
+      <input type="text" class="url-input" id="urlInput"
+        placeholder="Paste YouTube URL here..." autocomplete="off">
+      <button class="btn-start" id="btnStart" onclick="startPipeline()">
+        Start Pipeline
+      </button>
+    </div>
+    <div class="options-row">
+      <div class="option-group">
+        <label id="labelVoice">Voice</label>
+        <select id="voiceSelect">
+          <optgroup label="Female / 女声">
+            <option value="zh-CN-XiaoxiaoNeural">Xiaoxiao 晓晓</option>
+            <option value="zh-CN-XiaoyiNeural">Xiaoyi 晓依</option>
+            <option value="zh-CN-XiaochenNeural">Xiaochen 晓辰</option>
+            <option value="zh-CN-XiaohanNeural">Xiaohan 晓涵</option>
+            <option value="zh-CN-XiaomengNeural">Xiaomeng 晓梦</option>
+            <option value="zh-CN-XiaoruiNeural">Xiaorui 晓睿</option>
+            <option value="zh-CN-XiaoshuangNeural">Xiaoshuang 晓双</option>
+          </optgroup>
+          <optgroup label="Male / 男声">
+            <option value="zh-CN-YunxiNeural">Yunxi 云希</option>
+            <option value="zh-CN-YunjianNeural">Yunjian 云健</option>
+            <option value="zh-CN-YunyeNeural">Yunye 云野</option>
+            <option value="zh-CN-YunyangNeural">Yunyang 云扬</option>
+          </optgroup>
+          <optgroup label="Dialect / 方言">
+            <option value="zh-CN-liaoning-XiaobeiNeural">Xiaobei 晓北 (东北)</option>
+            <option value="zh-CN-shaanxi-XiaoniNeural">Xiaoni 晓妮 (陕西)</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="option-group">
+        <label id="labelWhisper">Whisper Model</label>
+        <select id="whisperSelect">
+          <option value="tiny">Tiny</option>
+          <option value="base">Base</option>
+          <option value="small">Small</option>
+          <option value="medium" selected>Medium</option>
+          <option value="large">Large</option>
+        </select>
+      </div>
+      <div class="option-group">
+        <label id="labelSkip">Skip To</label>
+        <select id="skipSelect">
+          <option value="" id="optFullPipeline">Full Pipeline</option>
+          <option value="download">Download</option>
+          <option value="separate">Separate</option>
+          <option value="transcribe">Transcribe</option>
+          <option value="translate">Translate</option>
+          <option value="synthesize">Synthesize</option>
+          <option value="compose">Compose</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline Visualization -->
+  <div class="pipeline-section" id="pipelineSection">
+    <div class="section-label" id="sectionLabel">Pipeline Status</div>
+    <div class="pipeline-track" id="pipelineTrack"></div>
+  </div>
+
+  <!-- Console -->
+  <div class="console-panel" id="consolePanel">
+    <div class="console-header">
+      <div class="console-dot red"></div>
+      <div class="console-dot yellow"></div>
+      <div class="console-dot green"></div>
+      <span class="console-title">pipeline.log</span>
+    </div>
+    <div class="console-body" id="consoleBody"></div>
+  </div>
+
+  <!-- Result -->
+  <div class="result-panel" id="resultPanel">
+    <div class="result-icon">
+      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <h3 id="resultTitle">Dubbing Complete</h3>
+    <p id="resultText">Your video has been dubbed successfully.</p>
+    <a class="btn-download" id="btnDownload" href="#">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span id="btnDownloadText">Download Video</span>
+    </a>
+  </div>
+
+  <!-- Error -->
+  <div class="error-panel" id="errorPanel">
+    <p class="error-msg" id="errorMsg"></p>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>yt-dlp + demucs + whisper + qwen + edge-tts + ffmpeg</p>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════
+   i18n — Chinese / English
+   ═══════════════════════════════════════ */
+const I18N = {
+  zh: {
+    mainTitle:      'YouTube <em>英文</em>视频<br>中文配音工具',
+    subtitle:       'AI 驱动 — 语音分离、转录、翻译、合成一站式处理',
+    urlPlaceholder: '粘贴 YouTube 视频链接...',
+    btnStart:       '开始处理',
+    btnProcessing:  '处理中...',
+    labelVoice:     '配音声音',
+    labelWhisper:   '识别模型',
+    labelSkip:      '跳转到',
+    optFullPipeline:'完整流程',
+    sectionLabel:   '流水线状态',
+    resultTitle:    '配音完成',
+    resultText:     '视频已成功配音，可以下载了。',
+    btnDownload:    '下载视频',
+    steps: {
+      download:   '下载',
+      separate:   '分离',
+      transcribe: '转录',
+      translate:  '翻译',
+      synthesize: '合成语音',
+      compose:    '合成视频',
+    },
+    logStarted:     '任务已启动',
+    logStartedStep: '开始',
+    logDone:        '完成',
+    logComplete:    '流水线完成！',
+    logConnLost:    '连接已断开',
+    logError:       '错误',
+  },
+  en: {
+    mainTitle:      'YouTube <em>English</em> to Chinese<br>Dubbing Pipeline',
+    subtitle:       'AI-powered video dubbing with voice separation, transcription, and synthesis',
+    urlPlaceholder: 'Paste YouTube URL here...',
+    btnStart:       'Start Pipeline',
+    btnProcessing:  'Processing...',
+    labelVoice:     'Voice',
+    labelWhisper:   'Whisper Model',
+    labelSkip:      'Skip To',
+    optFullPipeline:'Full Pipeline',
+    sectionLabel:   'Pipeline Status',
+    resultTitle:    'Dubbing Complete',
+    resultText:     'Your video has been dubbed successfully.',
+    btnDownload:    'Download Video',
+    steps: {
+      download:   'Download',
+      separate:   'Separate',
+      transcribe: 'Transcribe',
+      translate:  'Translate',
+      synthesize: 'Synthesize',
+      compose:    'Compose',
+    },
+    logStarted:     'Task started',
+    logStartedStep: 'Started',
+    logDone:        'Done',
+    logComplete:    'Pipeline complete!',
+    logConnLost:    'Connection lost',
+    logError:       'Error',
+  },
+};
+
+let currentLang = localStorage.getItem('lang') || 'zh';
+
+function t(key) { return I18N[currentLang][key] || I18N['en'][key] || key; }
+
+function applyLang() {
+  // Update switcher active state
+  document.getElementById('langZh').classList.toggle('active', currentLang === 'zh');
+  document.getElementById('langEn').classList.toggle('active', currentLang === 'en');
+
+  // Static text
+  document.getElementById('mainTitle').innerHTML = t('mainTitle');
+  document.getElementById('subtitle').textContent = t('subtitle');
+  document.getElementById('urlInput').placeholder = t('urlPlaceholder');
+  document.getElementById('labelVoice').textContent = t('labelVoice');
+  document.getElementById('labelWhisper').textContent = t('labelWhisper');
+  document.getElementById('labelSkip').textContent = t('labelSkip');
+  document.getElementById('optFullPipeline').textContent = t('optFullPipeline');
+  document.getElementById('sectionLabel').textContent = t('sectionLabel');
+  document.getElementById('resultTitle').textContent = t('resultTitle');
+  document.getElementById('resultText').textContent = t('resultText');
+  document.getElementById('btnDownloadText').textContent = t('btnDownload');
+
+  // Button (only if not processing)
+  const btn = document.getElementById('btnStart');
+  if (!btn.disabled) {
+    btn.textContent = t('btnStart');
+  }
+
+  // Rebuild pipeline nodes with translated labels
+  buildPipeline();
+
+  localStorage.setItem('lang', currentLang);
+}
+
+function switchLang(lang) {
+  if (lang === currentLang) return;
+  currentLang = lang;
+  applyLang();
+}
+
+/* ═══════════════════════════════════════
+   Pipeline & Core Logic
+   ═══════════════════════════════════════ */
+const STEPS = [
+  { id: 'download',   icon: '<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>' },
+  { id: 'separate',   icon: '<path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 00-1.172-2.828L3 3"/><path d="M15 9l6-6"/>' },
+  { id: 'transcribe', icon: '<path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>' },
+  { id: 'translate',  icon: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15 15 0 014 10 15 15 0 01-4 10 15 15 0 01-4-10 15 15 0 014-10z"/>' },
+  { id: 'synthesize', icon: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14"/><path d="M15.54 8.46a5 5 0 010 7.07"/>' },
+  { id: 'compose',    icon: '<rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/>' },
+];
+
+// Backend step names (Chinese) → step id
+const STEP_NAME_MAP = {
+  '下载': 'download',
+  '分离': 'separate',
+  '转录': 'transcribe',
+  '翻译': 'translate',
+  '合成语音': 'synthesize',
+  '合成视频': 'compose',
+};
+
+// Saved node times (persist across rebuilds)
+const nodeTimes = {};
+const nodeStates = {};
+
+let currentTaskId = null;
+
+function getStepLabel(stepId) {
+  return t('steps')[stepId] || stepId;
+}
+
+function buildPipeline() {
+  const track = document.getElementById('pipelineTrack');
+  track.innerHTML = '';
+  STEPS.forEach((step, i) => {
+    if (i > 0) {
+      const conn = document.createElement('div');
+      conn.className = 'pipeline-connector';
+      conn.id = `conn-${i}`;
+      // Restore connector state
+      const prevId = STEPS[i-1].id;
+      if (nodeStates[step.id] === 'active') conn.classList.add('active');
+      else if (nodeStates[prevId] === 'done' && (nodeStates[step.id] === 'done' || nodeStates[step.id] === 'active')) conn.classList.add('done');
+      track.appendChild(conn);
+    }
+    const node = document.createElement('div');
+    node.className = 'pipeline-node';
+    node.id = `node-${step.id}`;
+    if (nodeStates[step.id]) node.classList.add(nodeStates[step.id]);
+    node.innerHTML = `
+      <div class="node-dot">
+        <svg viewBox="0 0 24 24">${step.icon}</svg>
+      </div>
+      <div class="node-label">${getStepLabel(step.id)}</div>
+      <div class="node-time" id="time-${step.id}">${nodeTimes[step.id] || ''}</div>
+    `;
+    track.appendChild(node);
+  });
+}
+
+function resetUI() {
+  // Clear saved states
+  Object.keys(nodeStates).forEach(k => delete nodeStates[k]);
+  Object.keys(nodeTimes).forEach(k => delete nodeTimes[k]);
+  buildPipeline();
+  document.getElementById('consoleBody').innerHTML = '';
+  document.getElementById('resultPanel').classList.remove('visible');
+  document.getElementById('errorPanel').classList.remove('visible');
+  document.getElementById('pipelineSection').classList.add('visible');
+  document.getElementById('consolePanel').classList.add('visible');
+}
+
+function addLog(text, cls = 'info') {
+  const body = document.getElementById('consoleBody');
+  const now = new Date();
+  const ts = now.toTimeString().slice(0, 8);
+  const line = document.createElement('div');
+  line.className = `log-line ${cls}`;
+  line.innerHTML = `<span class="timestamp">${ts}</span>${text}`;
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+}
+
+function resolveStepId(backendStepName) {
+  return STEP_NAME_MAP[backendStepName] || backendStepName;
+}
+
+function setNodeState(stepId, state) {
+  nodeStates[stepId] = state;
+  const node = document.getElementById(`node-${stepId}`);
+  if (!node) return;
+  node.className = `pipeline-node ${state}`;
+
+  const idx = STEPS.findIndex(s => s.id === stepId);
+  if (idx > 0) {
+    const conn = document.getElementById(`conn-${idx}`);
+    if (conn) {
+      if (state === 'active') conn.className = 'pipeline-connector active';
+      else if (state === 'done') conn.className = 'pipeline-connector done';
+    }
+  }
+}
+
+async function startPipeline() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) { document.getElementById('urlInput').focus(); return; }
+
+  const btn = document.getElementById('btnStart');
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span>${t('btnProcessing')}`;
+
+  resetUI();
+
+  const body = {
+    url,
+    voice: document.getElementById('voiceSelect').value,
+    whisper_model: document.getElementById('whisperSelect').value,
+    skip_to: document.getElementById('skipSelect').value || undefined,
+  };
+
+  try {
+    const res = await fetch('/api/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    currentTaskId = data.task_id;
+    addLog(`${t('logStarted')}: ${data.task_id} | Video: ${data.video_id}`, 'accent');
+    listenEvents(data.task_id);
+  } catch (e) {
+    addLog(`${t('logError')}: ${e.message}`, 'error');
+    btn.disabled = false;
+    btn.textContent = t('btnStart');
+  }
+}
+
+function listenEvents(taskId) {
+  const es = new EventSource(`/api/events/${taskId}`);
+
+  es.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'heartbeat') return;
+
+    const stepId = resolveStepId(data.step);
+
+    if (data.type === 'step_start') {
+      setNodeState(stepId, 'active');
+      addLog(`[${data.step}] ${t('logStartedStep')}${data.message ? ' - ' + data.message : ''}`, 'accent');
+    } else if (data.type === 'step_update') {
+      addLog(`[${data.step}] ${data.message}`, 'info');
+    } else if (data.type === 'step_done') {
+      setNodeState(stepId, 'done');
+      if (data.elapsed) {
+        nodeTimes[stepId] = `${data.elapsed}s`;
+        const timeEl = document.getElementById(`time-${stepId}`);
+        if (timeEl) timeEl.textContent = `${data.elapsed}s`;
+      }
+      addLog(`[${data.step}] ${t('logDone')}${data.message ? ' - ' + data.message : ''} (${data.elapsed}s)`, 'success');
+    } else if (data.type === 'complete') {
+      addLog(t('logComplete'), 'success');
+      showResult(taskId);
+      es.close();
+      resetButton();
+    } else if (data.type === 'error') {
+      addLog(`${t('logError')}: ${data.message}`, 'error');
+      showError(data.message);
+      es.close();
+      resetButton();
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    addLog(t('logConnLost'), 'error');
+    resetButton();
+  };
+}
+
+function showResult(taskId) {
+  document.getElementById('resultPanel').classList.add('visible');
+  document.getElementById('btnDownload').href = `/api/download/${taskId}`;
+}
+
+function showError(msg) {
+  document.getElementById('errorPanel').classList.add('visible');
+  document.getElementById('errorMsg').textContent = msg;
+}
+
+function resetButton() {
+  const btn = document.getElementById('btnStart');
+  btn.disabled = false;
+  btn.textContent = t('btnStart');
+}
+
+// ─── Init ───
+buildPipeline();
+applyLang();
+
+document.getElementById('urlInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') startPipeline();
+});
+</script>
+</body>
+</html>

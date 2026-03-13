@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Workspace (downloaded videos, intermediate files)
+workspace/
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code
+.claude/
