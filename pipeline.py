@@ -1,5 +1,6 @@
 """流水线编排器：串联所有步骤"""
 
+import hashlib
 import os
 import re
 import shutil
@@ -29,25 +30,52 @@ def _extract_video_id(url: str) -> str:
     return str(abs(hash(url)))[:12]
 
 
+def _generate_local_id(file_path: str) -> str:
+    """根据本地文件生成唯一 ID: local_{name}_{hash[:8]}"""
+    name = os.path.splitext(os.path.basename(file_path))[0]
+    # 清理文件名，只保留字母数字和下划线
+    name = re.sub(r'[^a-zA-Z0-9_\u4e00-\u9fff]', '_', name)[:32]
+    # 读取文件前 1MB 计算 hash
+    h = hashlib.md5()
+    with open(file_path, 'rb') as f:
+        h.update(f.read(1024 * 1024))
+    return f"local_{name}_{h.hexdigest()[:8]}"
+
+
 def run_pipeline(
-    video_url: str,
+    video_url: str | None = None,
     output_path: str = "output.mp4",
     voice: str = TTS_VOICE_DEFAULT,
     whisper_model: str = WHISPER_MODEL_DEFAULT,
     keep_workspace: bool = False,
     skip_to: str | None = None,
+    local_file: str | None = None,
 ) -> str:
     """
     运行完整处理流水线。
     返回输出文件路径。
     """
-    video_id = _extract_video_id(video_url)
+    # 验证输入
+    if not video_url and not local_file:
+        raise ValueError("必须提供 video_url 或 local_file 之一")
+    if video_url and local_file:
+        raise ValueError("video_url 和 local_file 不能同时提供")
+
+    if local_file:
+        if not os.path.isfile(local_file):
+            raise FileNotFoundError(f"本地文件不存在: {local_file}")
+        video_id = _generate_local_id(local_file)
+        display_name = os.path.basename(local_file)
+    else:
+        video_id = _extract_video_id(video_url)
+        display_name = video_id
+
     work_dir = os.path.join(WORKSPACE_ROOT, video_id)
     os.makedirs(work_dir, exist_ok=True)
 
     print(f"\n{'='*60}")
-    print(f"  YouTube 英文视频中文配音工具")
-    print(f"  视频 ID: {video_id}")
+    print(f"  英文视频中文配音工具")
+    print(f"  {'文件' if local_file else '视频 ID'}: {display_name}")
     print(f"  工作目录: {work_dir}")
     print(f"{'='*60}\n")
 
@@ -73,7 +101,7 @@ def run_pipeline(
         print(f"\n--- 步骤: {step_name} ---")
 
         if step_name == "download":
-            result = download(video_url, work_dir)
+            result = download(video_url, work_dir, local_file=local_file)
             video_path = result["video"]
             audio_path = result["audio"]
 

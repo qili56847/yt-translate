@@ -1,4 +1,4 @@
-"""Flask Web 应用 —— YouTube 英文视频中文配音工具"""
+"""Flask Web 应用 —— 英文视频中文配音工具"""
 
 import json
 import os
@@ -9,11 +9,12 @@ import uuid
 
 from flask import Flask, render_template, request, jsonify, Response, send_file
 
-from config import WORKSPACE_ROOT, TTS_VOICE_DEFAULT, WHISPER_MODEL_DEFAULT
-from pipeline import run_pipeline, STEPS, _extract_video_id
+from config import WORKSPACE_ROOT, TTS_VOICE_DEFAULT, WHISPER_MODEL_DEFAULT, MAX_UPLOAD_SIZE
+from pipeline import run_pipeline, STEPS, _extract_video_id, _generate_local_id
 from utils.progress import set_event_queue
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = MAX_UPLOAD_SIZE
 
 # 存储任务状态：task_id -> {...}
 tasks: dict[str, dict] = {}
@@ -56,6 +57,71 @@ def start_task():
         try:
             run_pipeline(
                 video_url=url,
+                output_path=output_path,
+                voice=voice,
+                whisper_model=whisper_model,
+                keep_workspace=True,
+                skip_to=skip_to,
+            )
+            event_queue.put({"type": "complete", "step": "", "message": "done", "output": output_path})
+            tasks[task_id]["status"] = "complete"
+        except Exception as e:
+            event_queue.put({"type": "error", "step": "", "message": str(e)})
+            tasks[task_id]["status"] = "error"
+            tasks[task_id]["error"] = str(e)
+        finally:
+            set_event_queue(None)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+
+    return jsonify({"task_id": task_id, "video_id": video_id})
+
+
+@app.route("/api/upload", methods=["POST"])
+def upload_task():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({"error": "No file selected"}), 400
+
+    voice = request.form.get("voice", TTS_VOICE_DEFAULT)
+    whisper_model = request.form.get("whisper_model", WHISPER_MODEL_DEFAULT)
+    skip_to = request.form.get("skip_to") or None
+
+    task_id = uuid.uuid4().hex[:8]
+
+    # 保存上传文件到临时位置
+    upload_dir = os.path.join(WORKSPACE_ROOT, "_uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    safe_name = f"{task_id}_{file.filename}"
+    upload_path = os.path.join(upload_dir, safe_name)
+    file.save(upload_path)
+
+    # 生成 video_id
+    video_id = _generate_local_id(upload_path)
+    work_dir = os.path.join(WORKSPACE_ROOT, video_id)
+    os.makedirs(work_dir, exist_ok=True)
+    output_path = os.path.join(work_dir, "output.mp4")
+
+    event_queue = queue.Queue()
+
+    tasks[task_id] = {
+        "status": "running",
+        "url": None,
+        "video_id": video_id,
+        "output_path": output_path,
+        "queue": event_queue,
+        "error": None,
+    }
+
+    def run():
+        set_event_queue(event_queue)
+        try:
+            run_pipeline(
+                local_file=upload_path,
                 output_path=output_path,
                 voice=voice,
                 whisper_model=whisper_model,

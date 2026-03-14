@@ -236,6 +236,158 @@ body::after {
 .btn-start:active { transform: translateY(0); }
 .btn-start:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
 
+/* ─── Mode Toggle ─── */
+.mode-toggle {
+  display: flex;
+  margin-bottom: 20px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 10px 16px;
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-align: center;
+}
+
+.mode-btn.active {
+  color: var(--accent);
+  background: rgba(212,160,57,0.1);
+}
+
+.mode-btn:hover:not(.active) {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.03);
+}
+
+/* ─── File Drop Zone ─── */
+.file-input-area { display: none; }
+.file-input-area.visible { display: block; }
+
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 36px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.drop-zone:hover, .drop-zone.dragover {
+  border-color: var(--accent-dim);
+  background: rgba(212,160,57,0.04);
+}
+
+.drop-zone-icon {
+  width: 40px; height: 40px;
+  margin: 0 auto 12px;
+  stroke: var(--text-dim);
+  fill: none;
+  stroke-width: 1.5;
+  transition: stroke 0.3s;
+}
+
+.drop-zone:hover .drop-zone-icon, .drop-zone.dragover .drop-zone-icon {
+  stroke: var(--accent);
+}
+
+.drop-zone-text {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.drop-zone-hint {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.file-selected {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 24px;
+}
+
+.file-selected.visible { display: flex; }
+
+.file-selected-name {
+  flex: 1;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-selected-size {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.file-selected-remove {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 2px 6px;
+  transition: color 0.3s;
+}
+
+.file-selected-remove:hover { color: var(--red); }
+
+.upload-progress {
+  display: none;
+  margin-bottom: 24px;
+}
+
+.upload-progress.visible { display: block; }
+
+.upload-progress-bar {
+  height: 4px;
+  background: var(--bg-deep);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-glow));
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.upload-progress-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-top: 6px;
+  text-align: right;
+}
+
+.url-row.hidden { display: none; }
+
 /* ─── Options Row ─── */
 .options-row {
   display: grid;
@@ -592,10 +744,36 @@ body::after {
 
   <!-- Input Panel -->
   <div class="input-panel">
-    <div class="url-row">
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="modeUrl" onclick="switchMode('url')">YouTube URL</button>
+      <button class="mode-btn" id="modeFile" onclick="switchMode('file')">
+        <span id="modeFileLabel">Local File</span>
+      </button>
+    </div>
+    <div class="url-row" id="urlRow">
       <input type="text" class="url-input" id="urlInput"
         placeholder="Paste YouTube URL here..." autocomplete="off">
       <button class="btn-start" id="btnStart" onclick="startPipeline()">
+        Start Pipeline
+      </button>
+    </div>
+    <div class="file-input-area" id="fileInputArea">
+      <input type="file" id="fileInput" accept="video/*" style="display:none">
+      <div class="drop-zone" id="dropZone">
+        <svg class="drop-zone-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div class="drop-zone-text" id="dropZoneText">Click or drag video file here</div>
+        <div class="drop-zone-hint" id="dropZoneHint">MP4, MKV, AVI, MOV — max 2GB</div>
+      </div>
+      <div class="file-selected" id="fileSelected">
+        <span class="file-selected-name" id="fileSelectedName"></span>
+        <span class="file-selected-size" id="fileSelectedSize"></span>
+        <button class="file-selected-remove" onclick="clearFile()">&times;</button>
+      </div>
+      <div class="upload-progress" id="uploadProgress">
+        <div class="upload-progress-bar"><div class="upload-progress-fill" id="uploadProgressFill"></div></div>
+        <div class="upload-progress-text" id="uploadProgressText">0%</div>
+      </div>
+      <button class="btn-start" id="btnStartFile" onclick="startPipeline()" style="width:100%">
         Start Pipeline
       </button>
     </div>
@@ -696,11 +874,12 @@ body::after {
    ═══════════════════════════════════════ */
 const I18N = {
   zh: {
-    mainTitle:      'YouTube <em>英文</em>视频<br>中文配音工具',
+    mainTitle:      '<em>英文</em>视频<br>中文配音工具',
     subtitle:       'AI 驱动 — 语音分离、转录、翻译、合成一站式处理',
     urlPlaceholder: '粘贴 YouTube 视频链接...',
     btnStart:       '开始处理',
     btnProcessing:  '处理中...',
+    btnUploading:   '上传中...',
     labelVoice:     '配音声音',
     labelWhisper:   '识别模型',
     labelSkip:      '跳转到',
@@ -709,6 +888,10 @@ const I18N = {
     resultTitle:    '配音完成',
     resultText:     '视频已成功配音，可以下载了。',
     btnDownload:    '下载视频',
+    modeUrl:        'YouTube 链接',
+    modeFile:       '本地文件',
+    dropZoneText:   '点击或拖拽视频文件到此处',
+    dropZoneHint:   'MP4, MKV, AVI, MOV — 最大 2GB',
     steps: {
       download:   '下载',
       separate:   '分离',
@@ -725,11 +908,12 @@ const I18N = {
     logError:       '错误',
   },
   en: {
-    mainTitle:      'YouTube <em>English</em> to Chinese<br>Dubbing Pipeline',
+    mainTitle:      '<em>English</em> to Chinese<br>Dubbing Pipeline',
     subtitle:       'AI-powered video dubbing with voice separation, transcription, and synthesis',
     urlPlaceholder: 'Paste YouTube URL here...',
     btnStart:       'Start Pipeline',
     btnProcessing:  'Processing...',
+    btnUploading:   'Uploading...',
     labelVoice:     'Voice',
     labelWhisper:   'Whisper Model',
     labelSkip:      'Skip To',
@@ -738,6 +922,10 @@ const I18N = {
     resultTitle:    'Dubbing Complete',
     resultText:     'Your video has been dubbed successfully.',
     btnDownload:    'Download Video',
+    modeUrl:        'YouTube URL',
+    modeFile:       'Local File',
+    dropZoneText:   'Click or drag video file here',
+    dropZoneHint:   'MP4, MKV, AVI, MOV — max 2GB',
     steps: {
       download:   'Download',
       separate:   'Separate',
@@ -776,11 +964,19 @@ function applyLang() {
   document.getElementById('resultTitle').textContent = t('resultTitle');
   document.getElementById('resultText').textContent = t('resultText');
   document.getElementById('btnDownloadText').textContent = t('btnDownload');
+  document.getElementById('modeUrl').textContent = t('modeUrl');
+  document.getElementById('modeFileLabel').textContent = t('modeFile');
+  document.getElementById('dropZoneText').textContent = t('dropZoneText');
+  document.getElementById('dropZoneHint').textContent = t('dropZoneHint');
 
-  // Button (only if not processing)
+  // Buttons (only if not processing)
   const btn = document.getElementById('btnStart');
   if (!btn.disabled) {
     btn.textContent = t('btnStart');
+  }
+  const btnFile = document.getElementById('btnStartFile');
+  if (!btnFile.disabled) {
+    btnFile.textContent = t('btnStart');
   }
 
   // Rebuild pipeline nodes with translated labels
@@ -899,7 +1095,75 @@ function setNodeState(stepId, state) {
   }
 }
 
+let currentMode = 'url';
+let selectedFile = null;
+
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('modeUrl').classList.toggle('active', mode === 'url');
+  document.getElementById('modeFile').classList.toggle('active', mode === 'file');
+  document.getElementById('urlRow').classList.toggle('hidden', mode === 'file');
+  document.getElementById('fileInputArea').classList.toggle('visible', mode === 'file');
+}
+
+function handleFile(file) {
+  if (!file) return;
+  selectedFile = file;
+  document.getElementById('dropZone').style.display = 'none';
+  const sel = document.getElementById('fileSelected');
+  sel.classList.add('visible');
+  document.getElementById('fileSelectedName').textContent = file.name;
+  const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+  document.getElementById('fileSelectedSize').textContent = `${sizeMB} MB`;
+}
+
+function clearFile() {
+  selectedFile = null;
+  document.getElementById('fileInput').value = '';
+  document.getElementById('fileSelected').classList.remove('visible');
+  document.getElementById('dropZone').style.display = '';
+}
+
+// Drop zone events
+document.addEventListener('DOMContentLoaded', () => {
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+  });
+
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('dragover');
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length > 0) {
+      handleFile(fileInput.files[0]);
+    }
+  });
+});
+
 async function startPipeline() {
+  if (currentMode === 'url') {
+    await startUrlPipeline();
+  } else {
+    await startFilePipeline();
+  }
+}
+
+async function startUrlPipeline() {
   const url = document.getElementById('urlInput').value.trim();
   if (!url) { document.getElementById('urlInput').focus(); return; }
 
@@ -927,6 +1191,74 @@ async function startPipeline() {
 
     currentTaskId = data.task_id;
     addLog(`${t('logStarted')}: ${data.task_id} | Video: ${data.video_id}`, 'accent');
+    listenEvents(data.task_id);
+  } catch (e) {
+    addLog(`${t('logError')}: ${e.message}`, 'error');
+    btn.disabled = false;
+    btn.textContent = t('btnStart');
+  }
+}
+
+async function startFilePipeline() {
+  if (!selectedFile) { document.getElementById('dropZone').click(); return; }
+
+  const btn = document.getElementById('btnStartFile');
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span>${t('btnUploading')}`;
+
+  resetUI();
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  formData.append('voice', document.getElementById('voiceSelect').value);
+  formData.append('whisper_model', document.getElementById('whisperSelect').value);
+  const skipTo = document.getElementById('skipSelect').value;
+  if (skipTo) formData.append('skip_to', skipTo);
+
+  // Show upload progress
+  const progressEl = document.getElementById('uploadProgress');
+  progressEl.classList.add('visible');
+
+  try {
+    const data = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/upload');
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          document.getElementById('uploadProgressFill').style.width = pct + '%';
+          document.getElementById('uploadProgressText').textContent = pct + '%';
+        }
+      });
+
+      xhr.onload = () => {
+        progressEl.classList.remove('visible');
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          try {
+            const err = JSON.parse(xhr.responseText);
+            reject(new Error(err.error || `Upload failed (${xhr.status})`));
+          } catch {
+            reject(new Error(`Upload failed (${xhr.status})`));
+          }
+        }
+      };
+
+      xhr.onerror = () => {
+        progressEl.classList.remove('visible');
+        reject(new Error('Upload failed'));
+      };
+
+      xhr.send(formData);
+    });
+
+    if (data.error) throw new Error(data.error);
+
+    btn.innerHTML = `<span class="spinner"></span>${t('btnProcessing')}`;
+    currentTaskId = data.task_id;
+    addLog(`${t('logStarted')}: ${data.task_id} | ${selectedFile.name}`, 'accent');
     listenEvents(data.task_id);
   } catch (e) {
     addLog(`${t('logError')}: ${e.message}`, 'error');
@@ -991,6 +1323,9 @@ function resetButton() {
   const btn = document.getElementById('btnStart');
   btn.disabled = false;
   btn.textContent = t('btnStart');
+  const btnFile = document.getElementById('btnStartFile');
+  btnFile.disabled = false;
+  btnFile.textContent = t('btnStart');
 }
 
 // ─── Init ───

@@ -1,4 +1,4 @@
-"""CLI 入口：YouTube 英文视频中文配音工具"""
+"""CLI 入口：英文视频中文配音工具"""
 
 import argparse
 import sys
@@ -9,9 +9,13 @@ from pipeline import run_pipeline, STEPS
 
 def main():
     parser = argparse.ArgumentParser(
-        description="YouTube 英文视频中文配音工具 —— 自动下载、转录、翻译、配音",
+        description="英文视频中文配音工具 —— 自动下载/导入、转录、翻译、配音",
     )
-    parser.add_argument("url", help="YouTube 视频 URL")
+    parser.add_argument("url", nargs="?", default=None, help="YouTube 视频 URL")
+    parser.add_argument(
+        "-f", "--file",
+        help="本地视频文件路径",
+    )
     parser.add_argument(
         "--voice",
         default=TTS_VOICE_DEFAULT,
@@ -41,6 +45,11 @@ def main():
 
     args = parser.parse_args()
 
+    if not args.url and not args.file:
+        parser.error("必须提供 YouTube URL 或 --file 本地文件路径")
+    if args.url and args.file:
+        parser.error("不能同时提供 YouTube URL 和 --file")
+
     try:
         run_pipeline(
             video_url=args.url,
@@ -49,6 +58,7 @@ def main():
             whisper_model=args.whisper_model,
             keep_workspace=args.keep_workspace,
             skip_to=args.skip_to,
+            local_file=args.file,
         )
     except KeyboardInterrupt:
         print("\n\n已取消。中间文件保留在 workspace/ 目录中，可用 --skip-to 恢复。")

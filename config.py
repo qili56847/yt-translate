@@ -35,5 +35,8 @@ MAX_SPEED_RATIO = 1.5        # audio.py 兼容用，synthesize 不再使用
 FADE_OUT_MS = 200            # 截断时的 fade-out 时长 (ms)
 SEGMENT_GAP_MS = 30          # 相邻段之间最小间隔 (ms)，防止音频粘连
 
+# 上传文件大小限制
+MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
+
 # ffmpeg
 AUDIO_SAMPLE_RATE = 44100
