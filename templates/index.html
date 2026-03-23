@@ -73,19 +73,66 @@ body::after {
   padding: 48px 24px 80px;
 }
 
-/* ─── Lang Switcher ─── */
-.lang-switcher {
+/* ─── Top Bar ─── */
+.top-bar {
   position: fixed;
   top: 20px;
   right: 24px;
   z-index: 10;
   display: flex;
+  align-items: center;
+  gap: 12px;
+  opacity: 0;
+  animation: fadeUp 0.6s ease forwards 0.1s;
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 0;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  opacity: 0;
-  animation: fadeUp 0.6s ease forwards 0.1s;
+}
+
+.user-menu .username {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--accent);
+  padding: 7px 14px;
+  border-right: 1px solid var(--border);
+}
+
+.user-menu a {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 7px 12px;
+  border-right: 1px solid var(--border);
+  transition: all 0.3s;
+}
+
+.user-menu a:last-child { border-right: none; }
+
+.user-menu a:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.03);
+}
+
+.user-menu a.logout:hover {
+  color: var(--red);
+  background: rgba(224,85,85,0.08);
+}
+
+/* ─── Lang Switcher ─── */
+.lang-switcher {
+  display: flex;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .lang-btn {
@@ -727,10 +774,20 @@ body::after {
 </head>
 <body>
 
-<!-- Language Switcher -->
-<div class="lang-switcher">
-  <button class="lang-btn active" id="langZh" onclick="switchLang('zh')">CN</button>
-  <button class="lang-btn" id="langEn" onclick="switchLang('en')">EN</button>
+<!-- Top Bar: Language Switcher + User Menu -->
+<div class="top-bar">
+  <div class="lang-switcher">
+    <button class="lang-btn active" id="langZh" onclick="switchLang('zh')">CN</button>
+    <button class="lang-btn" id="langEn" onclick="switchLang('en')">EN</button>
+  </div>
+  <div class="user-menu">
+    <span class="username">{{ current_user.username }}</span>
+    <a href="{{ url_for('auth.change_password') }}" id="linkChangePassword">Password</a>
+    {% if current_user.is_admin %}
+    <a href="{{ url_for('auth.admin_panel') }}" id="linkAdmin">Admin</a>
+    {% endif %}
+    <a href="{{ url_for('auth.logout') }}" id="linkLogout" class="logout">Logout</a>
+  </div>
 </div>
 
 <div class="container">
@@ -906,6 +963,9 @@ const I18N = {
     logComplete:    '流水线完成！',
     logConnLost:    '连接已断开',
     logError:       '错误',
+    menuPassword:   '修改密码',
+    menuAdmin:      '管理',
+    menuLogout:     '退出',
   },
   en: {
     mainTitle:      '<em>English</em> to Chinese<br>Dubbing Pipeline',
@@ -940,6 +1000,9 @@ const I18N = {
     logComplete:    'Pipeline complete!',
     logConnLost:    'Connection lost',
     logError:       'Error',
+    menuPassword:   'Password',
+    menuAdmin:      'Admin',
+    menuLogout:     'Logout',
   },
 };
 
@@ -978,6 +1041,12 @@ function applyLang() {
   if (!btnFile.disabled) {
     btnFile.textContent = t('btnStart');
   }
+
+  // User menu
+  document.getElementById('linkChangePassword').textContent = t('menuPassword');
+  const linkAdmin = document.getElementById('linkAdmin');
+  if (linkAdmin) linkAdmin.textContent = t('menuAdmin');
+  document.getElementById('linkLogout').textContent = t('menuLogout');
 
   // Rebuild pipeline nodes with translated labels
   buildPipeline();

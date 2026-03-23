@@ -8,24 +8,31 @@ import time
 import uuid
 
 from flask import Flask, render_template, request, jsonify, Response, send_file
+from flask_login import login_required, current_user
 
-from config import WORKSPACE_ROOT, TTS_VOICE_DEFAULT, WHISPER_MODEL_DEFAULT, MAX_UPLOAD_SIZE
+from config import WORKSPACE_ROOT, TTS_VOICE_DEFAULT, WHISPER_MODEL_DEFAULT, MAX_UPLOAD_SIZE, SECRET_KEY
 from pipeline import run_pipeline, STEPS, _extract_video_id, _generate_local_id
 from utils.progress import set_event_queue
+from auth import init_db
 
 app = Flask(__name__)
+app.secret_key = SECRET_KEY
 app.config['MAX_CONTENT_LENGTH'] = MAX_UPLOAD_SIZE
+
+init_db(app)
 
 # 存储任务状态：task_id -> {...}
 tasks: dict[str, dict] = {}
 
 
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
 
 @app.route("/api/start", methods=["POST"])
+@login_required
 def start_task():
     data = request.json
     url = data.get("url", "").strip()
@@ -79,6 +86,7 @@ def start_task():
 
 
 @app.route("/api/upload", methods=["POST"])
+@login_required
 def upload_task():
     if 'file' not in request.files:
         return jsonify({"error": "No file provided"}), 400
@@ -144,6 +152,7 @@ def upload_task():
 
 
 @app.route("/api/events/<task_id>")
+@login_required
 def stream_events(task_id):
     if task_id not in tasks:
         return jsonify({"error": "Task not found"}), 404
@@ -163,6 +172,7 @@ def stream_events(task_id):
 
 
 @app.route("/api/download/<task_id>")
+@login_required
 def download_output(task_id):
     if task_id not in tasks:
         return jsonify({"error": "Task not found"}), 404

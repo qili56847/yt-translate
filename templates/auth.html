@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoiceOver Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-deep: #07070c;
+  --bg-panel: #0e0e16;
+  --bg-card: #141420;
+  --bg-elevated: #1a1a2a;
+  --border: #1e1e32;
+  --border-glow: #2a2a44;
+  --text-primary: #e8e6f0;
+  --text-secondary: #8886a0;
+  --text-dim: #55536e;
+  --accent: #d4a039;
+  --accent-glow: #e8b84d;
+  --accent-dim: #9a7428;
+  --green: #3dd68c;
+  --red: #e05555;
+}
+
+html { font-size: 16px; }
+
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: 'Noto Sans SC', 'JetBrains Mono', sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background:
+    radial-gradient(ellipse at 20% 20%, rgba(212,160,57,0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(61,214,140,0.02) 0%, transparent 50%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ─── Lang Switcher ─── */
+.lang-switcher {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  z-index: 10;
+  display: flex;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.lang-btn {
+  padding: 7px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.lang-btn:first-child { border-right: 1px solid var(--border); }
+
+.lang-btn.active {
+  color: var(--accent);
+  background: rgba(212,160,57,0.08);
+}
+
+.lang-btn:hover:not(.active) {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.03);
+}
+
+.auth-card {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px 32px;
+  margin: 24px;
+}
+
+.auth-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-dim), transparent);
+}
+
+.brand {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.brand .eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.brand h1 {
+  font-family: 'Instrument Serif', serif;
+  font-size: 1.8rem;
+  font-weight: 400;
+  color: var(--text-primary);
+}
+
+.error-msg {
+  background: rgba(224,85,85,0.1);
+  border: 1px solid rgba(224,85,85,0.3);
+  color: var(--red);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 20px;
+}
+
+.success-msg {
+  background: rgba(61,214,140,0.1);
+  border: 1px solid rgba(61,214,140,0.3);
+  color: var(--green);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 20px;
+}
+
+.password-hint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+
+.form-group {
+  margin-bottom: 18px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.form-group input {
+  width: 100%;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.form-group input:focus {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 3px rgba(212,160,57,0.08);
+}
+
+.btn-submit {
+  width: 100%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-glow));
+  color: var(--bg-deep);
+  border: none;
+  border-radius: 10px;
+  padding: 13px 24px;
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-top: 8px;
+}
+
+.btn-submit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(212,160,57,0.25);
+}
+
+.switch-link {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.switch-link a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.switch-link a:hover {
+  color: var(--accent-glow);
+}
+</style>
+</head>
+<body>
+
+<!-- Language Switcher -->
+<div class="lang-switcher">
+  <button class="lang-btn" id="langZh" onclick="switchLang('zh')">CN</button>
+  <button class="lang-btn" id="langEn" onclick="switchLang('en')">EN</button>
+</div>
+
+<div class="auth-card">
+  <div class="brand">
+    <div class="eyebrow">VoiceOver Studio</div>
+    <h1 id="authTitle"></h1>
+  </div>
+
+  {% if error %}
+  <div class="error-msg">{{ error }}</div>
+  {% endif %}
+
+  {% if request.args.get('registered') %}
+  <div class="success-msg" id="successMsg"></div>
+  {% endif %}
+
+  <form method="POST">
+    <div class="form-group">
+      <label id="labelUsername"></label>
+      <input type="text" name="username" required autocomplete="username" autofocus>
+    </div>
+    <div class="form-group">
+      <label id="labelPassword"></label>
+      <input type="password" name="password" required autocomplete="{{ 'current-password' if mode == 'login' else 'new-password' }}" {% if mode == 'register' %}minlength="8"{% endif %}>
+      {% if mode == "register" %}
+      <div class="password-hint" id="passwordHint"></div>
+      {% endif %}
+    </div>
+    {% if mode == "register" %}
+    <div class="form-group">
+      <label id="labelConfirm"></label>
+      <input type="password" name="confirm" required autocomplete="new-password" minlength="8">
+    </div>
+    {% endif %}
+    <button type="submit" class="btn-submit" id="btnSubmit"></button>
+  </form>
+
+  <div class="switch-link" id="switchLink"></div>
+</div>
+
+<script>
+const MODE = "{{ mode }}";
+
+const I18N = {
+  zh: {
+    login:    { title: '登录', username: '用户名', password: '密码', submit: '登录', switchText: '没有账号？', switchAction: '注册', registerSuccess: '注册成功，请登录' },
+    register: { title: '创建账号', username: '用户名', password: '密码', confirm: '确认密码', submit: '注册', switchText: '已有账号？', switchAction: '登录', passwordHint: '至少8位，需包含字母和数字' },
+  },
+  en: {
+    login:    { title: 'Sign In', username: 'Username', password: 'Password', submit: 'Sign In', switchText: "Don't have an account?", switchAction: 'Register', registerSuccess: 'Registration successful, please sign in' },
+    register: { title: 'Create Account', username: 'Username', password: 'Password', confirm: 'Confirm Password', submit: 'Register', switchText: 'Already have an account?', switchAction: 'Sign In', passwordHint: 'At least 8 characters, must include letters and digits' },
+  },
+};
+
+const SWITCH_URLS = {
+  login: "{{ url_for('auth.register') }}",
+  register: "{{ url_for('auth.login') }}",
+};
+
+let currentLang = localStorage.getItem('lang') || 'zh';
+
+function applyLang() {
+  const t = I18N[currentLang][MODE];
+  document.getElementById('authTitle').textContent = t.title;
+  document.getElementById('labelUsername').textContent = t.username;
+  document.getElementById('labelPassword').textContent = t.password;
+  const confirmEl = document.getElementById('labelConfirm');
+  if (confirmEl) confirmEl.textContent = t.confirm;
+  document.getElementById('btnSubmit').textContent = t.submit;
+
+  const successEl = document.getElementById('successMsg');
+  if (successEl) successEl.textContent = t.registerSuccess;
+
+  const hintEl = document.getElementById('passwordHint');
+  if (hintEl) hintEl.textContent = t.passwordHint;
+
+  document.getElementById('switchLink').innerHTML =
+    `${t.switchText} <a href="${SWITCH_URLS[MODE]}">${t.switchAction}</a>`;
+
+  document.getElementById('langZh').classList.toggle('active', currentLang === 'zh');
+  document.getElementById('langEn').classList.toggle('active', currentLang === 'en');
+  localStorage.setItem('lang', currentLang);
+}
+
+function switchLang(lang) {
+  if (lang === currentLang) return;
+  currentLang = lang;
+  applyLang();
+}
+
+applyLang();
+</script>
+</body>
+</html>

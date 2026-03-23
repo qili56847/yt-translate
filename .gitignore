@@ -10,12 +10,24 @@ venv/
 # Workspace (downloaded videos, intermediate files)
 workspace/
 
+# Database
+instance/
+*.db
+
 # Environment
 .env
 
 # IDE
 .vscode/
 .idea/
+.agents/
+.continue/
+.trae/
 
 # Claude Code
 .claude/
+skills-lock.json
+
+# Cookies (sensitive)
+cookies.txt
+www.youtube.com_cookies.txt

@@ -7,6 +7,8 @@ import subprocess
 from config import YTDLP_FORMAT, AUDIO_SAMPLE_RATE
 from utils.progress import ProgressReporter
 
+COOKIES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cookies.txt")
+
 
 def download(video_url: str | None, work_dir: str, local_file: str | None = None) -> dict:
     """
@@ -26,16 +28,21 @@ def download(video_url: str | None, work_dir: str, local_file: str | None = None
             shutil.copy2(local_file, video_path)
         else:
             progress.update("正在下载视频...")
-            subprocess.run(
-                [
-                    "yt-dlp",
-                    "-f", YTDLP_FORMAT,
-                    "-o", video_path,
-                    "--no-playlist",
-                    video_url,
-                ],
-                check=True,
-            )
+            cmd = [
+                "yt-dlp",
+                "-f", YTDLP_FORMAT,
+                "--merge-output-format", "mp4",
+                "--remote-components", "ejs:github",
+                "-o", video_path,
+                "--no-playlist",
+            ]
+            if os.path.exists(COOKIES_FILE):
+                cmd += ["--cookies", COOKIES_FILE]
+                progress.update(f"使用 cookies: {COOKIES_FILE}")
+            else:
+                progress.update(f"未找到 cookies 文件: {COOKIES_FILE}")
+            cmd.append(video_url)
+            subprocess.run(cmd, check=True)
     else:
         progress.update("视频已存在，跳过下载")
 

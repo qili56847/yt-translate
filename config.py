@@ -2,8 +2,22 @@
 
 import os
 
+# 将 ffmpeg 加入 PATH（如果尚未在 PATH 中）
+FFMPEG_BIN = os.environ.get("FFMPEG_BIN", r"C:\Users\lq_ka\Desktop\ffmpeg\bin")
+if FFMPEG_BIN and FFMPEG_BIN not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = FFMPEG_BIN + os.pathsep + os.environ.get("PATH", "")
+
 # 工作目录
 WORKSPACE_ROOT = "workspace"
+
+# 认证
+SECRET_KEY = os.environ.get("SECRET_KEY", "dev-change-me-in-production")
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin")
+
+# Supabase
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "http://127.0.0.1:54321")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
 # yt-dlp
 YTDLP_FORMAT = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]"
@@ -17,9 +31,9 @@ WHISPER_MODEL_DEFAULT = "medium"
 # OpenRouter API (Qwen 翻译)
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-TRANSLATE_MODEL = "deepseek/deepseek-v3.2"
-TRANSLATE_BATCH_SIZE = 40
-TRANSLATE_CONCURRENCY = 3    # 同时发送的翻译批次数
+TRANSLATE_MODEL = "qwen/qwen3-235b-a22b-2507"
+TRANSLATE_BATCH_SIZE = 20
+TRANSLATE_CONCURRENCY = 5    # 同时发送的翻译批次数
 
 # Edge-TTS
 TTS_VOICE_DEFAULT = "zh-CN-XiaoxiaoNeural"

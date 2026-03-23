@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — VoiceOver Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-deep: #07070c;
+  --bg-panel: #0e0e16;
+  --bg-card: #141420;
+  --border: #1e1e32;
+  --text-primary: #e8e6f0;
+  --text-secondary: #8886a0;
+  --text-dim: #55536e;
+  --accent: #d4a039;
+  --accent-glow: #e8b84d;
+  --accent-dim: #9a7428;
+  --green: #3dd68c;
+  --red: #e05555;
+}
+
+html { font-size: 16px; }
+
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: 'Noto Sans SC', 'JetBrains Mono', sans-serif;
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 32px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar .brand {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.topbar .spacer { flex: 1; }
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lang-switcher {
+  display: flex;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.lang-btn {
+  padding: 7px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.lang-btn:first-child { border-right: 1px solid var(--border); }
+
+.lang-btn.active {
+  color: var(--accent);
+  background: rgba(212,160,57,0.08);
+}
+
+.lang-btn:hover:not(.active) {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.03);
+}
+
+.topbar a {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.topbar a:hover { color: var(--text-primary); }
+
+.content {
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 0 24px;
+}
+
+h1 {
+  font-family: 'Instrument Serif', serif;
+  font-size: 2rem;
+  font-weight: 400;
+  margin-bottom: 24px;
+}
+
+.user-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.user-table th,
+.user-table td {
+  padding: 12px 18px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.user-table th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: var(--bg-card);
+}
+
+.user-table td {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.user-table tr:last-child td { border-bottom: none; }
+
+.badge-admin {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(212,160,57,0.15);
+  color: var(--accent);
+  border-radius: 4px;
+}
+
+.badge-user {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(136,134,160,0.1);
+  color: var(--text-dim);
+  border-radius: 4px;
+}
+
+.action-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-action {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  font-family: 'Noto Sans SC', sans-serif;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-action.reset {
+  color: var(--accent);
+}
+
+.btn-action.reset:hover {
+  background: rgba(212,160,57,0.1);
+  border-color: rgba(212,160,57,0.3);
+}
+
+.btn-action.delete {
+  color: var(--red);
+}
+
+.btn-action.delete:hover {
+  background: rgba(224,85,85,0.1);
+  border-color: rgba(224,85,85,0.3);
+}
+
+.reset-panel {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.reset-panel.show {
+  display: flex;
+}
+
+.reset-input {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  width: 140px;
+  outline: none;
+  margin-right: 4px;
+}
+
+.reset-input:focus {
+  border-color: var(--accent-dim);
+}
+
+.msg-bar {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 20px;
+}
+
+.msg-bar.success {
+  background: rgba(61,214,140,0.1);
+  border: 1px solid rgba(61,214,140,0.3);
+  color: var(--green);
+}
+
+.msg-bar.error {
+  background: rgba(224,85,85,0.1);
+  border: 1px solid rgba(224,85,85,0.3);
+  color: var(--red);
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="brand">VoiceOver Studio</span>
+  <span class="spacer"></span>
+  <div class="topbar-right">
+    <div class="lang-switcher">
+      <button class="lang-btn" id="langZh" onclick="switchLang('zh')">CN</button>
+      <button class="lang-btn" id="langEn" onclick="switchLang('en')">EN</button>
+    </div>
+    <a href="{{ url_for('index') }}" id="linkHome">Home</a>
+    <a href="{{ url_for('auth.logout') }}" id="linkLogout">Logout</a>
+  </div>
+</div>
+
+<div class="content">
+  <h1 id="pageTitle">User Management</h1>
+
+  {% if request.args.get('reset') == 'ok' %}
+  <div class="msg-bar success" id="msgSuccess"></div>
+  {% endif %}
+  {% if request.args.get('error') == 'password_invalid' %}
+  <div class="msg-bar error" id="msgError"></div>
+  {% endif %}
+
+  <table class="user-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th id="thUsername">Username</th>
+        <th id="thRole">Role</th>
+        <th id="thCreated">Created</th>
+        <th id="thAction">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+      <tr>
+        <td>{{ user.id }}</td>
+        <td>{{ user.username }}</td>
+        <td>
+          {% if user.is_admin %}
+            <span class="badge-admin" data-i18n="badgeAdmin">Admin</span>
+          {% else %}
+            <span class="badge-user" data-i18n="badgeUser">User</span>
+          {% endif %}
+        </td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;">{{ user.created_at }}</td>
+        <td>
+          {% if not user.is_admin %}
+          <div class="action-btns">
+            <button type="button" class="btn-action reset" data-i18n="btnReset" onclick="toggleReset(this)">Reset</button>
+            <form method="POST" action="{{ url_for('auth.delete_user', user_id=user.id) }}" style="display:inline" onsubmit="return confirm(t('confirmDelete').replace('{name}', '{{ user.username }}'))">
+              <button type="submit" class="btn-action delete" data-i18n="btnDelete">Delete</button>
+            </form>
+          </div>
+          <form class="reset-panel" method="POST" action="{{ url_for('auth.admin_reset_password', user_id=user.id) }}">
+            <input type="password" name="new_password" class="reset-input" data-i18n-placeholder="placeholderNewPwd" placeholder="New password" required minlength="8">
+            <button type="submit" class="btn-action reset" data-i18n="btnConfirmReset">Confirm</button>
+            <button type="button" class="btn-action" onclick="toggleReset(this)" data-i18n="btnCancel" style="color:var(--text-dim)">Cancel</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+const I18N = {
+  zh: {
+    pageTitle:        '用户管理',
+    linkHome:         '首页',
+    linkLogout:       '退出',
+    thUsername:        '用户名',
+    thRole:           '角色',
+    thCreated:        '创建时间',
+    thAction:         '操作',
+    badgeAdmin:       '管理员',
+    badgeUser:        '用户',
+    placeholderNewPwd:'新密码',
+    btnReset:         '重置密码',
+    btnDelete:        '删除',
+    btnConfirmReset:  '确认重置',
+    btnCancel:        '取消',
+    confirmDelete:    '确定要删除用户 {name} 吗？',
+    msgSuccess:       '密码已重置成功。',
+    msgError:         '密码无效。至少8位，需包含字母和数字。',
+  },
+  en: {
+    pageTitle:        'User Management',
+    linkHome:         'Home',
+    linkLogout:       'Logout',
+    thUsername:        'Username',
+    thRole:           'Role',
+    thCreated:        'Created',
+    thAction:         'Action',
+    badgeAdmin:       'Admin',
+    badgeUser:        'User',
+    placeholderNewPwd:'New password',
+    btnReset:         'Reset Password',
+    btnDelete:        'Delete',
+    btnConfirmReset:  'Confirm',
+    btnCancel:        'Cancel',
+    confirmDelete:    'Delete user {name}?',
+    msgSuccess:       'Password has been reset successfully.',
+    msgError:         'Invalid password. Must be at least 8 characters with both letters and digits.',
+  },
+};
+
+let currentLang = localStorage.getItem('lang') || 'zh';
+
+function t(key) { return I18N[currentLang][key] || I18N['en'][key] || key; }
+
+function applyLang() {
+  document.getElementById('langZh').classList.toggle('active', currentLang === 'zh');
+  document.getElementById('langEn').classList.toggle('active', currentLang === 'en');
+
+  document.getElementById('pageTitle').textContent = t('pageTitle');
+  document.getElementById('linkHome').textContent = t('linkHome');
+  document.getElementById('linkLogout').textContent = t('linkLogout');
+  document.getElementById('thUsername').textContent = t('thUsername');
+  document.getElementById('thRole').textContent = t('thRole');
+  document.getElementById('thCreated').textContent = t('thCreated');
+  document.getElementById('thAction').textContent = t('thAction');
+
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+
+  const msgSuccess = document.getElementById('msgSuccess');
+  if (msgSuccess) msgSuccess.textContent = t('msgSuccess');
+  const msgError = document.getElementById('msgError');
+  if (msgError) msgError.textContent = t('msgError');
+
+  localStorage.setItem('lang', currentLang);
+}
+
+function switchLang(lang) {
+  if (lang === currentLang) return;
+  currentLang = lang;
+  applyLang();
+}
+
+function toggleReset(btn) {
+  const td = btn.closest('td');
+  const panel = td.querySelector('.reset-panel');
+  const btns = td.querySelector('.action-btns');
+  const isOpen = panel.classList.contains('show');
+  panel.classList.toggle('show', !isOpen);
+  btns.style.display = isOpen ? '' : 'none';
+  if (!isOpen) {
+    panel.querySelector('.reset-input').focus();
+  }
+}
+
+applyLang();
+</script>
+
+</body>
+</html>
