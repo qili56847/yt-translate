@@ -15,6 +15,9 @@ python app.py
 # CLI
 python main.py "https://www.youtube.com/watch?v=VIDEO_ID" --keep-workspace
 
+# CLI with local file
+python main.py --file video.mp4 --keep-workspace
+
 # CLI with options
 python main.py "URL" --voice zh-CN-YunxiNeural --whisper-model large --skip-to translate --keep-workspace
 
@@ -32,7 +35,7 @@ Six-step sequential pipeline orchestrated by `pipeline.py`:
 1. **download** (`steps/download.py`) — yt-dlp downloads video, ffmpeg extracts audio to WAV
 2. **separate** (`steps/separate.py`) — demucs splits audio into vocals + no_vocals (auto-detects GPU)
 3. **transcribe** (`steps/transcribe.py`) — Whisper ASR generates English SRT (auto-detects GPU)
-4. **translate** (`steps/translate.py`) — OpenRouter API (DeepSeek) batch-translates SRT to Chinese with retry logic
+4. **translate** (`steps/translate.py`) — OpenRouter API (Qwen) batch-translates SRT to Chinese with retry logic
 5. **synthesize** (`steps/synthesize.py`) — Edge-TTS generates Chinese speech per segment, time-aligns via truncation with fade-out, mixes into single voice track (uniform speech rate across all segments)
 6. **compose** (`steps/compose.py`) — ffmpeg mixes voice track with background audio, burns Chinese subtitles (libass), outputs final MP4
 
@@ -42,20 +45,19 @@ Each step caches its output; if intermediate files exist in `workspace/<video_id
 - `main.py` — CLI with argparse, supports `--skip-to` for resuming
 - `app.py` — Flask web server with SSE real-time progress streaming to browser
 
-**Authentication (`auth.py`):**
-- SQLite + Flask-Login session-based auth; DB at `instance/app.db` (WAL mode)
-- All routes (pages + API) require `@login_required`; API paths return 401 JSON, page paths redirect to `/login`
-- `@admin_required` decorator for admin panel (`/admin`)
-- Auto-creates admin user on first run (credentials via `ADMIN_USERNAME`/`ADMIN_PASSWORD` env vars, defaults: admin/admin)
-- Registration open to all; password rule: 8+ chars, must contain both letters and digits
-- Templates: `auth.html` (login/register with CN/EN i18n), `admin.html` (user management)
+**Authentication (`auth.py`):** Supabase + Flask-Login session-based auth,所有路由需登录，auto-creates admin on first run。详见代码。
 
-**Key utilities:**
-- `utils/progress.py` — `ProgressReporter` class that outputs to both CLI (print) and Web (SSE queue via thread-local `_event_queue`)
-- `utils/srt.py` — SRT parser/writer with `SubtitleSegment` dataclass (index, start_ms, end_ms, text)
-- `utils/audio.py` — ffmpeg wrappers for duration detection, atempo speed adjustment, truncation with fade-out
+**Key utilities:** `utils/progress.py`(CLI/SSE双输出)、`utils/srt.py`(SRT解析)、`utils/audio.py`(ffmpeg封装)
 
-**Config (`config.py`):** All tunable constants — API keys, model names, concurrency limits, speed ratios, auth settings. Most values can be overridden via environment variables.
+**Config (`config.py`):** 所有可调常量，大部分支持环境变量覆盖。
+
+## Key Environment Variables
+
+- `OPENROUTER_API_KEY` — required for translation step
+- `SUPABASE_URL` / `SUPABASE_KEY` — Supabase connection (required for auth)
+- `ADMIN_USERNAME` / `ADMIN_PASSWORD` — initial admin credentials
+- `SECRET_KEY` — Flask session secret
+- `FFMPEG_BIN` — custom ffmpeg binary path
 
 ## Key Design Decisions
 
