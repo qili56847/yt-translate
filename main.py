@@ -42,6 +42,11 @@ def main():
         choices=STEPS,
         help="从指定步骤恢复（需要 workspace 中的中间文件）",
     )
+    parser.add_argument(
+        "--review",
+        action="store_true",
+        help="翻译完成后暂停，等待人工核对字幕文件",
+    )
 
     args = parser.parse_args()
 
@@ -49,6 +54,14 @@ def main():
         parser.error("必须提供 YouTube URL 或 --file 本地文件路径")
     if args.url and args.file:
         parser.error("不能同时提供 YouTube URL 和 --file")
+
+    def _cli_review(srt_path):
+        print(f"\n{'='*60}")
+        print(f"  翻译完成！请核对字幕文件：")
+        print(f"  {srt_path}")
+        print(f"{'='*60}")
+        print("核对要点：断句是否合理、翻译是否通顺、字数是否匹配时间窗")
+        input("核对完成后按回车继续，或 Ctrl+C 取消...")
 
     try:
         run_pipeline(
@@ -59,6 +72,7 @@ def main():
             keep_workspace=args.keep_workspace,
             skip_to=args.skip_to,
             local_file=args.file,
+            review_callback=_cli_review if args.review else None,
         )
     except KeyboardInterrupt:
         print("\n\n已取消。中间文件保留在 workspace/ 目录中，可用 --skip-to 恢复。")

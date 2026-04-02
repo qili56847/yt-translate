@@ -50,14 +50,31 @@ def start_task():
 
     event_queue = queue.Queue()
 
+    review_event = threading.Event()
+
     tasks[task_id] = {
         "status": "running",
         "url": url,
         "video_id": video_id,
         "output_path": output_path,
         "queue": event_queue,
+        "review_event": review_event,
+        "owner": current_user.id,
         "error": None,
     }
+
+    def _web_review(srt_path):
+        event_queue.put({
+            "type": "review",
+            "step": "translate",
+            "message": "翻译完成，等待核对",
+        })
+        tasks[task_id]["status"] = "reviewing"
+        confirmed = review_event.wait(timeout=3600)
+        review_event.clear()
+        if not confirmed:
+            raise RuntimeError("翻译核对超时（1小时），任务已取消。请重新提交。")
+        tasks[task_id]["status"] = "running"
 
     def run():
         set_event_queue(event_queue)
@@ -69,6 +86,7 @@ def start_task():
                 whisper_model=whisper_model,
                 keep_workspace=True,
                 skip_to=skip_to,
+                review_callback=_web_review,
             )
             event_queue.put({"type": "complete", "step": "", "message": "done", "output": output_path})
             tasks[task_id]["status"] = "complete"
@@ -116,14 +134,31 @@ def upload_task():
 
     event_queue = queue.Queue()
 
+    review_event = threading.Event()
+
     tasks[task_id] = {
         "status": "running",
         "url": None,
         "video_id": video_id,
         "output_path": output_path,
         "queue": event_queue,
+        "review_event": review_event,
+        "owner": current_user.id,
         "error": None,
     }
+
+    def _web_review(srt_path):
+        event_queue.put({
+            "type": "review",
+            "step": "translate",
+            "message": "翻译完成，等待核对",
+        })
+        tasks[task_id]["status"] = "reviewing"
+        confirmed = review_event.wait(timeout=3600)
+        review_event.clear()
+        if not confirmed:
+            raise RuntimeError("翻译核对超时（1小时），任务已取消。请重新提交。")
+        tasks[task_id]["status"] = "running"
 
     def run():
         set_event_queue(event_queue)
@@ -135,6 +170,7 @@ def upload_task():
                 whisper_model=whisper_model,
                 keep_workspace=True,
                 skip_to=skip_to,
+                review_callback=_web_review,
             )
             event_queue.put({"type": "complete", "step": "", "message": "done", "output": output_path})
             tasks[task_id]["status"] = "complete"
@@ -156,6 +192,8 @@ def upload_task():
 def stream_events(task_id):
     if task_id not in tasks:
         return jsonify({"error": "Task not found"}), 404
+    if tasks[task_id].get("owner") != current_user.id:
+        return jsonify({"error": "Forbidden"}), 403
 
     def generate():
         q = tasks[task_id]["queue"]
@@ -169,6 +207,50 @@ def stream_events(task_id):
                 yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
 
     return Response(generate(), mimetype="text/event-stream")
+
+
+@app.route("/api/srt/<task_id>", methods=["GET"])
+@login_required
+def get_srt(task_id):
+    if task_id not in tasks:
+        return jsonify({"error": "Task not found"}), 404
+    task = tasks[task_id]
+    if task.get("owner") != current_user.id:
+        return jsonify({"error": "Forbidden"}), 403
+    srt_path = os.path.join(WORKSPACE_ROOT, task["video_id"], "translated.srt")
+    if not os.path.exists(srt_path):
+        return jsonify({"error": "SRT file not found"}), 404
+    with open(srt_path, "r", encoding="utf-8") as f:
+        return jsonify({"content": f.read()})
+
+
+@app.route("/api/srt/<task_id>", methods=["POST"])
+@login_required
+def save_srt(task_id):
+    if task_id not in tasks:
+        return jsonify({"error": "Task not found"}), 404
+    task = tasks[task_id]
+    if task.get("owner") != current_user.id:
+        return jsonify({"error": "Forbidden"}), 403
+    content = request.json.get("content", "")
+    srt_path = os.path.join(WORKSPACE_ROOT, task["video_id"], "translated.srt")
+    with open(srt_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/review-continue/<task_id>", methods=["POST"])
+@login_required
+def review_continue(task_id):
+    if task_id not in tasks:
+        return jsonify({"error": "Task not found"}), 404
+    task = tasks[task_id]
+    if task.get("owner") != current_user.id:
+        return jsonify({"error": "Forbidden"}), 403
+    review_event = task.get("review_event")
+    if review_event:
+        review_event.set()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/download/<task_id>")

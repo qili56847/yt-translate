@@ -698,6 +698,48 @@ body::after {
 .btn-download:hover { background: rgba(61,214,140,0.18); box-shadow: 0 4px 20px rgba(61,214,140,0.15); transform: translateY(-1px); }
 .btn-download svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
 
+/* ─── Review Panel ─── */
+.review-panel {
+  background: var(--bg-panel);
+  border: 1px solid rgba(61,214,140,0.3);
+  border-radius: 12px;
+  padding: 24px;
+  display: none;
+  animation: fadeUp 0.5s ease;
+}
+.review-panel.visible { display: block; }
+.review-panel h3 { color: var(--accent); margin-bottom: 8px; }
+.review-panel p { color: var(--text-dim); font-size: 0.9rem; margin-bottom: 16px; }
+#srtEditor {
+  width: 100%;
+  min-height: 400px;
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  resize: vertical;
+  box-sizing: border-box;
+}
+#srtEditor:focus { outline: none; border-color: var(--accent); }
+.review-actions { display: flex; gap: 12px; margin-top: 16px; }
+.btn-review {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.btn-review:first-child { background: var(--accent); color: #111; }
+.btn-review:first-child:hover { opacity: 0.85; }
+.btn-review.btn-skip { background: rgba(255,255,255,0.08); color: var(--text-dim); }
+.btn-review.btn-skip:hover { background: rgba(255,255,255,0.15); }
+
 /* ─── Error State ─── */
 .error-panel {
   background: var(--bg-panel);
@@ -908,6 +950,21 @@ body::after {
     </a>
   </div>
 
+  <!-- SRT Review -->
+  <div class="review-panel" id="reviewPanel">
+    <h3 id="reviewTitle">翻译核对</h3>
+    <p id="reviewText">翻译完成，请核对字幕内容。如需修改请直接编辑，完成后点击继续。</p>
+    <textarea id="srtEditor" spellcheck="false"></textarea>
+    <div class="review-actions">
+      <button class="btn-review" id="btnSaveAndContinue" onclick="saveAndContinue()">
+        <span id="btnSaveText">保存并继续</span>
+      </button>
+      <button class="btn-review btn-skip" id="btnSkipReview" onclick="skipReview()">
+        <span id="btnSkipText">跳过核对，直接继续</span>
+      </button>
+    </div>
+  </div>
+
   <!-- Error -->
   <div class="error-panel" id="errorPanel">
     <p class="error-msg" id="errorMsg"></p>
@@ -960,6 +1017,11 @@ const I18N = {
     menuPassword:   '修改密码',
     menuAdmin:      '管理',
     menuLogout:     '退出',
+    reviewTitle:    '翻译核对',
+    reviewText:     '翻译完成，请核对字幕内容。如需修改请直接编辑，完成后点击继续。',
+    btnSave:        '保存并继续',
+    btnSkip:        '跳过核对，直接继续',
+    logReview:      '翻译完成，等待人工核对...',
   },
   en: {
     mainTitle:      '<em>English</em> to Chinese<br>Dubbing Pipeline',
@@ -997,6 +1059,11 @@ const I18N = {
     menuPassword:   'Password',
     menuAdmin:      'Admin',
     menuLogout:     'Logout',
+    reviewTitle:    'Review Translation',
+    reviewText:     'Translation complete. Review and edit subtitles below, then continue.',
+    btnSave:        'Save & Continue',
+    btnSkip:        'Skip Review & Continue',
+    logReview:      'Translation complete, waiting for review...',
   },
 };
 
@@ -1021,6 +1088,10 @@ function applyLang() {
   document.getElementById('resultTitle').textContent = t('resultTitle');
   document.getElementById('resultText').textContent = t('resultText');
   document.getElementById('btnDownloadText').textContent = t('btnDownload');
+  document.getElementById('reviewTitle').textContent = t('reviewTitle');
+  document.getElementById('reviewText').textContent = t('reviewText');
+  document.getElementById('btnSaveText').textContent = t('btnSave');
+  document.getElementById('btnSkipText').textContent = t('btnSkip');
   document.getElementById('modeUrl').textContent = t('modeUrl');
   document.getElementById('modeFileLabel').textContent = t('modeFile');
   document.getElementById('dropZoneText').textContent = t('dropZoneText');
@@ -1123,6 +1194,7 @@ function resetUI() {
   document.getElementById('consoleBody').innerHTML = '';
   document.getElementById('resultPanel').classList.remove('visible');
   document.getElementById('errorPanel').classList.remove('visible');
+  document.getElementById('reviewPanel').classList.remove('visible');
   document.getElementById('pipelineSection').classList.add('visible');
   document.getElementById('consolePanel').classList.add('visible');
 }
@@ -1352,6 +1424,10 @@ function listenEvents(taskId) {
         if (timeEl) timeEl.textContent = `${data.elapsed}s`;
       }
       addLog(`[${data.step}] ${t('logDone')}${data.message ? ' - ' + data.message : ''} (${data.elapsed}s)`, 'success');
+    } else if (data.type === 'review') {
+      setNodeState(resolveStepId('translate'), 'done');
+      addLog(t('logReview'), 'accent');
+      showReviewPanel(taskId);
     } else if (data.type === 'complete') {
       addLog(t('logComplete'), 'success');
       showResult(taskId);
@@ -1370,6 +1446,52 @@ function listenEvents(taskId) {
     addLog(t('logConnLost'), 'error');
     resetButton();
   };
+}
+
+let currentReviewTaskId = null;
+
+async function showReviewPanel(taskId) {
+  currentReviewTaskId = taskId;
+  try {
+    const resp = await fetch(`/api/srt/${taskId}`);
+    const data = await resp.json();
+    document.getElementById('srtEditor').value = data.content || '';
+  } catch (e) {
+    document.getElementById('srtEditor').value = '// Failed to load SRT file';
+  }
+  document.getElementById('reviewPanel').classList.add('visible');
+}
+
+async function saveAndContinue() {
+  if (!currentReviewTaskId) return;
+  const content = document.getElementById('srtEditor').value;
+  try {
+    const saveResp = await fetch(`/api/srt/${currentReviewTaskId}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({content}),
+    });
+    if (!saveResp.ok) {
+      const err = await saveResp.json().catch(() => ({}));
+      throw new Error(err.error || `Save failed (${saveResp.status})`);
+    }
+    const contResp = await fetch(`/api/review-continue/${currentReviewTaskId}`, {method: 'POST'});
+    if (!contResp.ok) {
+      const err = await contResp.json().catch(() => ({}));
+      throw new Error(err.error || `Continue failed (${contResp.status})`);
+    }
+    document.getElementById('reviewPanel').classList.remove('visible');
+    addLog('[translate] SRT saved, continuing...', 'success');
+  } catch (e) {
+    addLog(`[translate] ${e.message}`, 'error');
+  }
+}
+
+async function skipReview() {
+  if (!currentReviewTaskId) return;
+  document.getElementById('reviewPanel').classList.remove('visible');
+  addLog('[translate] Skipped review, continuing...', 'info');
+  await fetch(`/api/review-continue/${currentReviewTaskId}`, {method: 'POST'});
 }
 
 function showResult(taskId) {

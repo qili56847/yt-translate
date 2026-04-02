@@ -50,6 +50,7 @@ def run_pipeline(
     keep_workspace: bool = False,
     skip_to: str | None = None,
     local_file: str | None = None,
+    review_callback=None,
 ) -> str:
     """
     运行完整处理流水线。
@@ -117,6 +118,8 @@ def run_pipeline(
 
         elif step_name == "translate":
             translated_path = translate(srt_path, work_dir)
+            if review_callback:
+                review_callback(translated_path)
 
         elif step_name == "synthesize":
             result = synthesize(translated_path, work_dir, voice)
