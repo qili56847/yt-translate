@@ -31,7 +31,7 @@ WHISPER_MODEL_DEFAULT = "medium"
 # OpenRouter API (Qwen 翻译)
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-TRANSLATE_MODEL = "qwen/qwen3-235b-a22b-2507"
+TRANSLATE_MODEL = "deepseek/deepseek-v3.2"
 TRANSLATE_BATCH_SIZE = 20
 TRANSLATE_CONCURRENCY = 5    # 同时发送的翻译批次数
 
@@ -39,15 +39,21 @@ TRANSLATE_CONCURRENCY = 5    # 同时发送的翻译批次数
 TTS_VOICE_DEFAULT = "zh-CN-XiaoxiaoNeural"
 TTS_CONCURRENCY = 4
 
-# Edge-TTS 语速（全局统一模式：所有段用同一个语速，确保听感一致）
-TTS_MS_PER_CHAR = 230        # 中文每字符预估时长 (ms)，用于计算全局 TTS rate
-TTS_RATE_CLAMP_MIN = -20     # 全局 TTS rate 下限 (%)
-TTS_RATE_CLAMP_MAX = 40      # 全局 TTS rate 上限 (%)
+# Edge-TTS 语速
+TTS_NATURAL_MS_PER_CHAR = 251   # Edge-TTS 在 rate=+0% 时的实测自然速度 (ms/字)
+TTS_FIXED_RATE = 40             # TTS 固定语速 (%)，所有段统一
+TTS_TARGET_FILL = 0.95          # 翻译目标填充率：TTS 音频占可用时间窗的比例
+TRANSLATE_CHAR_TOLERANCE = 3    # 翻译校验：实际字数与目标偏差超过此值则重译
 
-# 时间对齐（不做 atempo 变速，仅截断兜底）
-MAX_SPEED_RATIO = 1.5        # audio.py 兼容用，synthesize 不再使用
+# 段落合并（合并 Whisper 切碎的连续语流，消除碎片段）
+MERGE_GAP_THRESHOLD_MS = 100    # gap ≤ 此值的相邻段合并 (ms)
+MERGE_SHORT_THRESHOLD_MS = 500  # 短于此值的碎片段强制合并到相邻段 (ms)
+MERGE_MAX_DURATION_MS = 15000   # 合并后单段最大时长 (ms)，防止 TTS 失败
+
+# 时间对齐（atempo + 截断兜底）
+MAX_SPEED_RATIO = 1.5        # audio.py 兼容用
 FADE_OUT_MS = 200            # 截断时的 fade-out 时长 (ms)
-SEGMENT_GAP_MS = 30          # 相邻段之间最小间隔 (ms)，防止音频粘连
+SEGMENT_GAP_MS = 10          # 相邻段之间最小间隔 (ms)，防止音频粘连
 
 # 上传文件大小限制
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2GB

@@ -93,7 +93,9 @@ def run_pipeline(
     vocals_path = os.path.join(work_dir, "htdemucs", "original_audio", "vocals.wav")
     no_vocals_path = os.path.join(work_dir, "htdemucs", "original_audio", "no_vocals.wav")
     srt_path = os.path.join(work_dir, "transcript.srt")
-    translated_path = os.path.join(work_dir, "translated.srt")
+    # 优先使用合并后的字幕（synthesize 产出），保证与语音时间轴一致
+    translated_merged = os.path.join(work_dir, "translated_merged.srt")
+    translated_path = translated_merged if os.path.exists(translated_merged) else os.path.join(work_dir, "translated.srt")
     voice_track_path = os.path.join(work_dir, "chinese_voice_track.wav")
 
     # 执行各步骤
@@ -117,7 +119,9 @@ def run_pipeline(
             translated_path = translate(srt_path, work_dir)
 
         elif step_name == "synthesize":
-            voice_track_path = synthesize(translated_path, work_dir, voice)
+            result = synthesize(translated_path, work_dir, voice)
+            voice_track_path = result["voice_track"]
+            translated_path = result["subtitle"]  # 用合并后的字幕，与语音时间轴一致
 
         elif step_name == "compose":
             compose(video_path, no_vocals_path, voice_track_path, output_path, subtitle_path=translated_path)
