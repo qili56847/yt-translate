@@ -94,9 +94,14 @@ def run_pipeline(
     vocals_path = os.path.join(work_dir, "htdemucs", "original_audio", "vocals.wav")
     no_vocals_path = os.path.join(work_dir, "htdemucs", "original_audio", "no_vocals.wav")
     srt_path = os.path.join(work_dir, "transcript.srt")
-    # 优先使用合并后的字幕（synthesize 产出），保证与语音时间轴一致
+    translated_source_path = os.path.join(work_dir, "translated.srt")
     translated_merged = os.path.join(work_dir, "translated_merged.srt")
-    translated_path = translated_merged if os.path.exists(translated_merged) else os.path.join(work_dir, "translated.srt")
+    translated_display = os.path.join(work_dir, "translated_display.srt")
+    subtitle_path = translated_source_path
+    if os.path.exists(translated_display):
+        subtitle_path = translated_display
+    elif os.path.exists(translated_merged):
+        subtitle_path = translated_merged
     voice_track_path = os.path.join(work_dir, "chinese_voice_track.wav")
 
     # 执行各步骤
@@ -117,21 +122,27 @@ def run_pipeline(
             srt_path = transcribe(vocals_path, work_dir, whisper_model)
 
         elif step_name == "translate":
-            translated_path = translate(srt_path, work_dir)
+            translated_source_path = translate(srt_path, work_dir)
             if review_callback:
-                # 拆分长段为短句，方便用户核对
+                # 拆分长段为短句，方便用户核对（写到临时文件，不覆盖原文件）
                 from utils.srt import parse_srt, write_srt, split_long_segments
-                segs = split_long_segments(parse_srt(translated_path))
-                write_srt(segs, translated_path)
-                review_callback(translated_path)
+                review_srt = os.path.join(work_dir, "translated_review.srt")
+                segs = split_long_segments(parse_srt(translated_source_path))
+                write_srt(segs, review_srt)
+                review_callback(review_srt)
 
         elif step_name == "synthesize":
-            result = synthesize(translated_path, work_dir, voice)
+            result = synthesize(translated_source_path, work_dir, voice)
             voice_track_path = result["voice_track"]
-            translated_path = result["subtitle"]  # 用合并后的字幕，与语音时间轴一致
+            subtitle_path = result["subtitle"]  # 用烧录版短帧字幕，时间轴仍与语音一致
 
         elif step_name == "compose":
-            compose(video_path, no_vocals_path, voice_track_path, output_path, subtitle_path=translated_path)
+            if not os.path.exists(translated_display) and os.path.exists(translated_merged):
+                from utils.srt import parse_srt, wrap_long_segments, write_srt
+                display_segs = wrap_long_segments(parse_srt(translated_merged))
+                write_srt(display_segs, translated_display)
+                subtitle_path = translated_display
+            compose(video_path, no_vocals_path, voice_track_path, output_path, subtitle_path=subtitle_path)
 
     print(f"\n{'='*60}")
     print(f"  完成！输出文件: {output_path}")

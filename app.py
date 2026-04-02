@@ -217,7 +217,9 @@ def get_srt(task_id):
     task = tasks[task_id]
     if task.get("owner") != current_user.id:
         return jsonify({"error": "Forbidden"}), 403
-    srt_path = os.path.join(WORKSPACE_ROOT, task["video_id"], "translated.srt")
+    # 优先读取核对用的短句版本，没有则回退到原始翻译
+    review_srt = os.path.join(WORKSPACE_ROOT, task["video_id"], "translated_review.srt")
+    srt_path = review_srt if os.path.exists(review_srt) else os.path.join(WORKSPACE_ROOT, task["video_id"], "translated.srt")
     if not os.path.exists(srt_path):
         return jsonify({"error": "SRT file not found"}), 404
     with open(srt_path, "r", encoding="utf-8") as f:

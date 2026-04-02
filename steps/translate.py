@@ -41,6 +41,7 @@ from utils.progress import ProgressReporter
 from utils.srt import SubtitleSegment, parse_srt, write_srt, merge_segments
 
 TRANSLATE_MAX_RETRIES = 3
+TRANSLATE_CACHE_VERSION = 2
 
 TRANSLATE_PROMPT = """\
 你是字幕翻译专家。将以下英文字幕翻译为简体中文。
@@ -53,6 +54,7 @@ TRANSLATE_PROMPT = """\
    - 字数过少 → 出现长停顿
    - **宁可多1-2字，也不要少于目标字数**
    - 如果原文信息量不够填满目标字数，可以适当补充语气词或展开表达
+   - 如果句子里必须保留英文术语、产品名、代码名或数字，周围中文要进一步压缩，因为这类内容朗读更占时间
 4. 输入共 {count} 条，必须返回恰好 {count} 条翻译，一一对应，不可合并或拆分
 5. 返回纯 JSON 数组，每个元素是翻译后的中文文本字符串
 
@@ -94,6 +96,43 @@ def _calculate_target_chars(window_ms: int) -> int:
     return max(target, 2)
 
 
+def _build_cache_hash(segments: list[SubtitleSegment]) -> str:
+    """为翻译缓存构建稳定签名，包含源字幕和当前翻译策略。"""
+    payload = {
+        "cache_version": TRANSLATE_CACHE_VERSION,
+        "model": TRANSLATE_MODEL,
+        "tts_natural_ms_per_char": TTS_NATURAL_MS_PER_CHAR,
+        "tts_fixed_rate": TTS_FIXED_RATE,
+        "tts_target_fill": TTS_TARGET_FILL,
+        "char_tolerance": TRANSLATE_CHAR_TOLERANCE,
+        "segments": [
+            {"start_ms": s.start_ms, "end_ms": s.end_ms, "text": s.text}
+            for s in segments
+        ],
+    }
+    return hashlib.md5(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:12]
+
+
+def _find_length_violations(
+    segments: list[SubtitleSegment],
+    target_chars_map: dict[int, int],
+) -> list[dict]:
+    """找出字数明显偏离目标的字幕段。"""
+    violations = []
+    for seg in segments:
+        target = target_chars_map[seg.index]
+        actual = _count_chinese_chars(seg.text)
+        if abs(actual - target) > TRANSLATE_CHAR_TOLERANCE:
+            violations.append({
+                "seg": seg,
+                "target_chars": target,
+                "actual_chars": actual,
+            })
+    return violations
+
+
 def _translate_batch(client: OpenAI, items: list[dict]) -> list[str]:
     """翻译一批字幕文本。items: [{"text": str, "target_chars": int}, ...]"""
     response = client.chat.completions.create(
@@ -124,7 +163,17 @@ def _translate_batch(client: OpenAI, items: list[dict]) -> list[str]:
             if inside:
                 json_lines.append(line)
         response_text = "\n".join(json_lines)
-    return json.loads(response_text)
+    result = json.loads(response_text)
+    # 确保每个元素是字符串（API 可能返回 dict 列表）
+    normalized = []
+    for item in result:
+        if isinstance(item, str):
+            normalized.append(item)
+        elif isinstance(item, dict):
+            normalized.append(item.get("text") or item.get("translation") or next(iter(item.values()), ""))
+        else:
+            normalized.append(str(item))
+    return normalized
 
 
 def _translate_batch_with_retry(client: OpenAI, items: list[dict]) -> list[str] | None:
@@ -176,24 +225,31 @@ def translate(srt_path: str, work_dir: str) -> str:
     )
     progress.update(f"合并: {len(raw_segments)} 段 → {len(segments)} 段")
 
-    # 缓存检查：段数 + 源文本哈希都匹配才复用
-    source_hash = hashlib.md5(
-        "|".join(f"{s.start_ms}-{s.end_ms}:{s.text}" for s in segments).encode()
-    ).hexdigest()[:12]
-    cache_hash_path = os.path.join(work_dir, "translated.hash")
-    if os.path.exists(translated_path) and os.path.exists(cache_hash_path):
-        stored_hash = open(cache_hash_path, "r").read().strip()
-        if stored_hash == source_hash:
-            progress.update("翻译结果已存在且源文本匹配，跳过")
-            progress.done()
-            return translated_path
-        progress.update("源文本已变化，重新翻译")
-
     # 计算每段目标字数
     target_chars_map = {}
     for seg in segments:
         window_ms = seg.end_ms - seg.start_ms
         target_chars_map[seg.index] = _calculate_target_chars(window_ms)
+
+    # 缓存检查：源字幕 + 翻译策略 + 长度校验都匹配才复用
+    source_hash = _build_cache_hash(segments)
+    cache_hash_path = os.path.join(work_dir, "translated.hash")
+    if os.path.exists(translated_path) and os.path.exists(cache_hash_path):
+        stored_hash = open(cache_hash_path, "r", encoding="utf-8").read().strip()
+        if stored_hash == source_hash:
+            cached_segments = parse_srt(translated_path)
+            cache_valid = len(cached_segments) == len(segments)
+            violations = (
+                _find_length_violations(cached_segments, target_chars_map)
+                if cache_valid else [{"seg": None}]
+            )
+            if cache_valid and not violations:
+                progress.update("翻译结果已存在且通过当前规则校验，跳过")
+                progress.done()
+                return translated_path
+            progress.update("缓存译文未通过当前长度校验，重新翻译")
+        else:
+            progress.update("源文本或翻译规则已变化，重新翻译")
 
     client = OpenAI(
         base_url=OPENROUTER_BASE_URL,
@@ -253,18 +309,10 @@ def translate(srt_path: str, work_dir: str) -> str:
             ))
 
     # 校验字数偏差，收集需要重译的段
-    need_retranslate = []
-    for seg in translated_segments:
-        target = target_chars_map[seg.index]
-        actual = _count_chinese_chars(seg.text)
-        if abs(actual - target) > TRANSLATE_CHAR_TOLERANCE:
-            orig_seg = next(s for s in segments if s.index == seg.index)
-            need_retranslate.append({
-                "seg": seg,
-                "orig_text": orig_seg.text,
-                "target_chars": target,
-                "actual_chars": actual,
-            })
+    need_retranslate = _find_length_violations(translated_segments, target_chars_map)
+    for item in need_retranslate:
+        orig_seg = next(s for s in segments if s.index == item["seg"].index)
+        item["orig_text"] = orig_seg.text
 
     if need_retranslate:
         progress.update(f"校验: {len(need_retranslate)}/{len(translated_segments)} 段字数偏差过大，重译中...")
@@ -310,7 +358,15 @@ def translate(srt_path: str, work_dir: str) -> str:
                             if inside:
                                 json_lines.append(line)
                         resp_text = "\n".join(json_lines)
-                    new_texts = json.loads(resp_text)
+                    new_texts_raw = json.loads(resp_text)
+                    new_texts = []
+                    for item in new_texts_raw:
+                        if isinstance(item, str):
+                            new_texts.append(item)
+                        elif isinstance(item, dict):
+                            new_texts.append(item.get("text") or item.get("translation") or next(iter(item.values()), ""))
+                        else:
+                            new_texts.append(str(item))
                     if len(new_texts) == len(batch):
                         for item, new_text in zip(batch, new_texts):
                             item["seg"].text = new_text

@@ -1,9 +1,10 @@
 """步骤5：Edge-TTS 生成中文语音 + 时间对齐
 
-核心策略：段落合并 + 自适应语速
+核心策略：段落合并 + 全局统一语速
 - 合并 Whisper 切碎的连续语流，消除碎片段（<500ms）
-- 每段根据可用时间窗独立计算 TTS rate，减少后处理变速
-- 超长段用 atempo 轻微加速或截断兜底
+- 所有段使用同一个 TTS rate，保证全程语速一致
+- 仅对超长段做加速/截断兜底，不再对短段单独减速
+- 额外产出烧录用短帧字幕，缩短长句停留时间
 """
 
 import asyncio
@@ -18,11 +19,18 @@ from config import (
     TTS_VOICE_DEFAULT, TTS_CONCURRENCY,
     TTS_FIXED_RATE,
     MERGE_GAP_THRESHOLD_MS, MERGE_SHORT_THRESHOLD_MS, MERGE_MAX_DURATION_MS,
-    AUDIO_SAMPLE_RATE, FADE_OUT_MS, SEGMENT_GAP_MS,
+    AUDIO_SAMPLE_RATE, SEGMENT_GAP_MS,
 )
 from utils.audio import get_duration_ms, adjust_speed, truncate_with_fade
 from utils.progress import ProgressReporter
-from utils.srt import SubtitleSegment, parse_srt, write_srt, merge_segments
+from utils.srt import (
+    fit_segments_to_audio,
+    SubtitleSegment,
+    merge_segments,
+    parse_srt,
+    wrap_long_segments,
+    write_srt,
+)
 
 
 def _calculate_fixed_rate() -> str:
@@ -80,7 +88,7 @@ async def _generate_all_segments(
     voice: str,
     tts_dir: str,
 ) -> list[dict]:
-    """并发生成所有 TTS 片段（每段独立语速）"""
+    """并发生成所有 TTS 片段（所有段统一语速）"""
     semaphore = asyncio.Semaphore(TTS_CONCURRENCY)
     tasks = [
         _generate_one_segment(seg, voice, rate, tts_dir, semaphore)
@@ -120,16 +128,13 @@ def _calculate_max_durations(seg_infos: list[dict]) -> list[dict]:
 
 
 ATEMPO_LIMIT = 1.4       # 加速上限，超过此倍率截断
-SLOWDOWN_LIMIT = 0.85    # 减速下限（即最多减速 15%）
-FILL_TARGET = 0.90       # 目标填充率，音频太短时减速到此比例
 
 
 def _align_segment(seg_info: dict, aligned_dir: str) -> dict | None:
     """对齐单个片段。
 
-    双向微调策略（±15% 范围内）：
-    - 音频太短（填充率 < FILL_TARGET） → atempo 减速，让语音填满时间窗
-    - 音频刚好或略长 → 直接转格式
+    统一语速策略下，只处理超长片段：
+    - 音频未超窗 → 直接转格式
     - 音频超长但 ≤ ATEMPO_LIMIT → atempo 加速塞入
     - 音频严重超长 → 加速到 ATEMPO_LIMIT 后截断
     """
@@ -137,7 +142,6 @@ def _align_segment(seg_info: dict, aligned_dir: str) -> dict | None:
     index = seg_info["index"]
     actual_ms = seg_info.get("actual_ms")
     max_ms = seg_info.get("max_duration_ms", seg_info["target_duration_ms"])
-    target_ms = seg_info["target_duration_ms"]
 
     if actual_ms is None:
         return None
@@ -149,26 +153,26 @@ def _align_segment(seg_info: dict, aligned_dir: str) -> dict | None:
         ratio = actual_ms / max_ms
         if ratio <= ATEMPO_LIMIT:
             adjust_speed(raw_path, aligned_path, ratio)
+            aligned_duration_ms = max_ms
         else:
             temp_path = os.path.join(aligned_dir, f"temp_{index:04d}.wav")
             adjust_speed(raw_path, temp_path, ATEMPO_LIMIT)
             truncate_with_fade(temp_path, aligned_path, max_ms)
             os.remove(temp_path)
-    elif actual_ms < target_ms * FILL_TARGET and target_ms > 500:
-        # 音频太短（填充率不足）：减速让语音填满时间窗
-        # 目标：减速到 target_ms * FILL_TARGET
-        desired_ms = target_ms * FILL_TARGET
-        ratio = actual_ms / desired_ms  # ratio < 1.0 = 减速
-        ratio = max(ratio, SLOWDOWN_LIMIT)  # 最多减速 15%
-        adjust_speed(raw_path, aligned_path, ratio)
+            aligned_duration_ms = max_ms
     else:
-        # 正常范围：直接转格式
+        # 保持全局统一语速，只做格式转换
         subprocess.run(
             ["ffmpeg", "-y", "-i", raw_path, "-ar", str(AUDIO_SAMPLE_RATE), aligned_path],
             capture_output=True, check=True,
         )
+        aligned_duration_ms = actual_ms
 
-    return {"path": aligned_path, "start_ms": seg_info["start_ms"]}
+    return {
+        "path": aligned_path,
+        "start_ms": seg_info["start_ms"],
+        "duration_ms": aligned_duration_ms,
+    }
 
 
 MIX_BATCH_SIZE = 50
@@ -269,7 +273,7 @@ def _mix_voice_track(aligned_segments: list[dict], work_dir: str, total_duration
 def synthesize(srt_path: str, work_dir: str, voice: str = TTS_VOICE_DEFAULT) -> dict:
     """
     生成中文语音轨道并与原始时间轴对齐。
-    返回 {"voice_track": 语音轨路径, "subtitle": 合并后字幕路径}。
+    返回 {"voice_track": 语音轨路径, "subtitle": 烧录字幕路径}。
     """
     progress = ProgressReporter("合成语音")
     progress.start(f"声音: {voice}")
@@ -322,29 +326,42 @@ def synthesize(srt_path: str, work_dir: str, voice: str = TTS_VOICE_DEFAULT) -> 
     # 统计对齐情况
     truncated = 0
     sped_up = 0
-    slowed_down = 0
     for info in seg_infos:
         actual = info.get("actual_ms")
         if not actual:
             continue
         max_ms = info.get("max_duration_ms", info["target_duration_ms"])
-        target = info["target_duration_ms"]
         if actual > max_ms:
             if actual / max_ms > ATEMPO_LIMIT:
                 truncated += 1
             else:
                 sped_up += 1
-        elif actual < target * FILL_TARGET and target > 500:
-            slowed_down += 1
 
-    # 8. 保存合并后的字幕（供 compose 烧字幕用，与语音时间轴一致）
+    # 8. 按实际语音时长重算字幕时间轴，再生成烧录字幕
+    aligned_durations = [
+        result["duration_ms"] if result is not None else info["target_duration_ms"]
+        for result, info in zip(results, seg_infos)
+    ]
+    subtitle_segments = fit_segments_to_audio(
+        segments,
+        aligned_durations,
+        min_gap_ms=SEGMENT_GAP_MS,
+    )
     merged_srt_path = os.path.join(work_dir, "translated_merged.srt")
-    write_srt(segments, merged_srt_path)
+    write_srt(subtitle_segments, merged_srt_path)
+    display_segments = wrap_long_segments(subtitle_segments)
+    display_srt_path = os.path.join(work_dir, "translated_display.srt")
+    write_srt(display_segments, display_srt_path)
+    progress.update(f"字幕拆分: {len(segments)} 段 → {len(display_segments)} 帧")
 
     # 9. 合成语音轨
     progress.update("正在合成语音轨道...")
     total_duration_ms = max(seg.end_ms for seg in segments) if segments else 0
     voice_track_path = _mix_voice_track(aligned, work_dir, total_duration_ms)
 
-    progress.done(f"{len(aligned)} 段已完成（{slowed_down} 段减速，{sped_up} 段加速，{truncated} 段截断）")
-    return {"voice_track": voice_track_path, "subtitle": merged_srt_path}
+    progress.done(f"{len(aligned)} 段已完成（{sped_up} 段加速，{truncated} 段截断）")
+    return {
+        "voice_track": voice_track_path,
+        "subtitle": display_srt_path,
+        "subtitle_merged": merged_srt_path,
+    }

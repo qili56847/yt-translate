@@ -1,11 +1,9 @@
 """步骤6：ffmpeg 混音 + 合成最终视频"""
 
-import os
 import subprocess
 
 from config import AUDIO_SAMPLE_RATE
 from utils.progress import ProgressReporter
-from utils.srt import parse_srt, write_srt, split_long_segments
 
 
 def compose(
@@ -45,20 +43,16 @@ def compose(
     # 合成最终视频
     progress.update("正在合成视频...")
     if subtitle_path:
-        # 拆分长字幕为短句，改善阅读体验
-        display_segments = split_long_segments(parse_srt(subtitle_path))
-        display_srt = os.path.join(os.path.dirname(subtitle_path), "subtitle_display.srt")
-        write_srt(display_segments, display_srt)
         # 烧录字幕需要重编码视频
         # Windows 路径需要转义反斜杠和冒号
-        srt_escaped = display_srt.replace("\\", "/").replace(":", "\\:")
+        srt_escaped = subtitle_path.replace("\\", "/").replace(":", "\\:")
         progress.update("正在烧录中文字幕...")
         subprocess.run(
             [
                 "ffmpeg", "-y",
                 "-i", video_path,
                 "-i", mixed_audio,
-                "-vf", f"subtitles='{srt_escaped}':force_style='FontSize=22,FontName=Microsoft YaHei,PrimaryColour=&H000000FF,OutlineColour=&H00000000,Outline=2,Shadow=1,MarginV=30'",
+                "-vf", f"subtitles='{srt_escaped}':force_style='FontSize=16,FontName=Microsoft YaHei,PrimaryColour=&H000000FF,OutlineColour=&H00000000,Outline=2,Shadow=1,MarginV=30'",
                 "-c:v", "libx264", "-crf", "20", "-preset", "fast",
                 "-map", "0:v:0",
                 "-map", "1:a:0",

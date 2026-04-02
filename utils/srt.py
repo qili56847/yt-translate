@@ -170,6 +170,123 @@ def split_long_segments(
     return result
 
 
+def _find_best_split(text: str, target_pos: int, split_positions: list[int], start: int = 0) -> int | None:
+    """在 split_positions 中找最接近 target_pos 的切分点"""
+    best = None
+    for pos in split_positions:
+        if pos <= start or pos >= len(text):
+            continue
+        if best is None or abs(pos - target_pos) < abs(best - target_pos):
+            best = pos
+    return best
+
+
+def _wrap_text(text: str, max_chars_per_line: int) -> str:
+    """将文本折成两行（在最接近中点的标点处换行）。"""
+    if len(text) <= max_chars_per_line:
+        return text
+    split_positions = [m.end() for m in re.finditer(r"[。！？；，、：]", text)]
+    mid = len(text) // 2
+    best = _find_best_split(text, mid, split_positions)
+    if best:
+        return text[:best] + "\n" + text[best:]
+    return text
+
+
+def wrap_long_segments(
+    segments: list[SubtitleSegment],
+    max_chars_per_line: int = 18,
+    max_lines: int = 2,
+) -> list[SubtitleSegment]:
+    """为视频烧录准备字幕：每帧最多 max_lines 行，每行 ≤ max_chars_per_line。
+
+    - 短文本（≤ max_chars_per_line）：单行，保持时间窗
+    - 中等文本（≤ max_chars_per_line × max_lines）：折行，保持时间窗
+    - 长文本（> 以上）：按标点拆成多段时间顺序显示，每段折成 ≤ 2 行
+    """
+    max_screen = max_chars_per_line * max_lines  # 一帧最多显示的字数
+    strong_punct = re.compile(r"(?<=[。！？；])")
+    weak_punct = re.compile(r"(?<=[，、：])")
+
+    result = []
+    idx = 1
+    for seg in segments:
+        text = seg.text.replace("\n", "")
+
+        if len(text) <= max_screen:
+            # 短或中等：折行即可，时间窗不变
+            wrapped = _wrap_text(text, max_chars_per_line)
+            result.append(SubtitleSegment(idx, seg.start_ms, seg.end_ms, wrapped))
+            idx += 1
+            continue
+
+        # 长文本：先按标点拆成 ≤ max_screen 的块
+        pieces = [p for p in strong_punct.split(text) if p.strip()]
+        chunks = []
+        for piece in pieces:
+            if len(piece) > max_screen:
+                sub = [p for p in weak_punct.split(piece) if p.strip()]
+                pieces_to_add = sub if sub else [piece]
+            else:
+                pieces_to_add = [piece]
+            for p in pieces_to_add:
+                # 尝试合并到上一个 chunk
+                if chunks and len(chunks[-1]) + len(p) <= max_screen:
+                    chunks[-1] += p
+                else:
+                    chunks.append(p)
+
+        if len(chunks) <= 1:
+            wrapped = _wrap_text(text, max_chars_per_line)
+            result.append(SubtitleSegment(idx, seg.start_ms, seg.end_ms, wrapped))
+            idx += 1
+            continue
+
+        # 按字数比例分配时间
+        total_chars = sum(len(c) for c in chunks)
+        total_ms = seg.end_ms - seg.start_ms
+        cursor = seg.start_ms
+        for i, chunk in enumerate(chunks):
+            ratio = len(chunk) / total_chars if total_chars > 0 else 1 / len(chunks)
+            duration = round(total_ms * ratio)
+            end = cursor + duration if i < len(chunks) - 1 else seg.end_ms
+            wrapped = _wrap_text(chunk, max_chars_per_line)
+            result.append(SubtitleSegment(idx, cursor, end, wrapped))
+            idx += 1
+            cursor = end
+
+    return result
+
+
+def fit_segments_to_audio(
+    segments: list[SubtitleSegment],
+    audio_durations_ms: list[float],
+    min_gap_ms: int = 10,
+) -> list[SubtitleSegment]:
+    """按实际语音时长重算字幕结束时间。
+
+    每段起点保持不变，终点缩到实际语音结束位置。
+    如后面还有下一段，则额外确保不越过下一段起点前的 min_gap_ms。
+    """
+    if len(segments) != len(audio_durations_ms):
+        raise ValueError("segments 与 audio_durations_ms 长度不一致")
+
+    fitted: list[SubtitleSegment] = []
+    for i, (seg, duration_ms) in enumerate(zip(segments, audio_durations_ms)):
+        end_ms = seg.start_ms + round(duration_ms)
+        if i < len(segments) - 1:
+            latest_end = max(seg.start_ms, segments[i + 1].start_ms - min_gap_ms)
+            end_ms = min(end_ms, latest_end)
+        end_ms = max(seg.start_ms, end_ms)
+        fitted.append(SubtitleSegment(
+            index=seg.index,
+            start_ms=seg.start_ms,
+            end_ms=end_ms,
+            text=seg.text,
+        ))
+    return fitted
+
+
 def write_srt(segments: list[SubtitleSegment], path: str) -> None:
     """将字幕段列表写入 SRT 文件"""
     with open(path, "w", encoding="utf-8") as f:
