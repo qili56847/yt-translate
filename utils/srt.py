@@ -118,6 +118,58 @@ def merge_segments(
     return merged
 
 
+def split_long_segments(
+    segments: list[SubtitleSegment],
+    max_chars: int = 20,
+) -> list[SubtitleSegment]:
+    """把长字幕段按标点拆分成短句，用于字幕显示。
+
+    拆分优先级：先按句号/问号/感叹号/分号切，不够短再按逗号/顿号切。
+    每个短句按字数比例分配原段的时间窗。
+    """
+    # 强分隔符（句子边界）和弱分隔符（短语边界）
+    strong_punct = re.compile(r"(?<=[。！？；])")
+    weak_punct = re.compile(r"(?<=[，、：])")
+
+    result = []
+    idx = 1
+    for seg in segments:
+        if len(seg.text) <= max_chars:
+            result.append(SubtitleSegment(idx, seg.start_ms, seg.end_ms, seg.text))
+            idx += 1
+            continue
+
+        # 先按强标点拆
+        parts = [p for p in strong_punct.split(seg.text) if p.strip()]
+        # 如果还有超长的，再按弱标点拆
+        final_parts = []
+        for part in parts:
+            if len(part) <= max_chars:
+                final_parts.append(part)
+            else:
+                sub = [p for p in weak_punct.split(part) if p.strip()]
+                final_parts.extend(sub)
+
+        if len(final_parts) <= 1:
+            result.append(SubtitleSegment(idx, seg.start_ms, seg.end_ms, seg.text))
+            idx += 1
+            continue
+
+        # 按字数比例分配时间
+        total_chars = sum(len(p) for p in final_parts)
+        total_ms = seg.end_ms - seg.start_ms
+        cursor = seg.start_ms
+        for i, part in enumerate(final_parts):
+            ratio = len(part) / total_chars if total_chars > 0 else 1 / len(final_parts)
+            duration = round(total_ms * ratio)
+            end = cursor + duration if i < len(final_parts) - 1 else seg.end_ms
+            result.append(SubtitleSegment(idx, cursor, end, part))
+            idx += 1
+            cursor = end
+
+    return result
+
+
 def write_srt(segments: list[SubtitleSegment], path: str) -> None:
     """将字幕段列表写入 SRT 文件"""
     with open(path, "w", encoding="utf-8") as f:

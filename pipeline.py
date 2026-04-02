@@ -119,6 +119,10 @@ def run_pipeline(
         elif step_name == "translate":
             translated_path = translate(srt_path, work_dir)
             if review_callback:
+                # 拆分长段为短句，方便用户核对
+                from utils.srt import parse_srt, write_srt, split_long_segments
+                segs = split_long_segments(parse_srt(translated_path))
+                write_srt(segs, translated_path)
                 review_callback(translated_path)
 
         elif step_name == "synthesize":
