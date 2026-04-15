@@ -1,6 +1,7 @@
 """流水线编排器：串联所有步骤"""
 
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -103,6 +104,8 @@ def run_pipeline(
     elif os.path.exists(translated_merged):
         subtitle_path = translated_merged
     voice_track_path = os.path.join(work_dir, "chinese_voice_track.wav")
+    keep_ranges_path = os.path.join(work_dir, "keep_ranges.json")
+    keep_ranges: list[tuple[int, int]] | None = None
 
     # 执行各步骤
     for step_name in STEPS[start_idx:]:
@@ -135,6 +138,10 @@ def run_pipeline(
             result = synthesize(translated_source_path, work_dir, voice)
             voice_track_path = result["voice_track"]
             subtitle_path = result["subtitle"]  # 用烧录版短帧字幕，时间轴仍与语音一致
+            kr_path = result.get("keep_ranges_path")
+            if kr_path and os.path.exists(kr_path):
+                with open(kr_path, "r", encoding="utf-8") as f:
+                    keep_ranges = [tuple(r) for r in json.load(f)]
 
         elif step_name == "compose":
             if not os.path.exists(translated_display) and os.path.exists(translated_merged):
@@ -142,7 +149,13 @@ def run_pipeline(
                 display_segs = wrap_long_segments(parse_srt(translated_merged))
                 write_srt(display_segs, translated_display)
                 subtitle_path = translated_display
-            compose(video_path, no_vocals_path, voice_track_path, output_path, subtitle_path=subtitle_path)
+            if keep_ranges is None and os.path.exists(keep_ranges_path):
+                with open(keep_ranges_path, "r", encoding="utf-8") as f:
+                    keep_ranges = [tuple(r) for r in json.load(f)]
+            compose(
+                video_path, no_vocals_path, voice_track_path, output_path,
+                subtitle_path=subtitle_path, keep_ranges=keep_ranges,
+            )
 
     print(f"\n{'='*60}")
     print(f"  完成！输出文件: {output_path}")

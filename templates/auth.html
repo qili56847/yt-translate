@@ -20,11 +20,25 @@
   --text-primary: #e8e6f0;
   --text-secondary: #8886a0;
   --text-dim: #55536e;
+  --text-label: #d8d6f0;
   --accent: #d4a039;
   --accent-glow: #e8b84d;
   --accent-dim: #9a7428;
   --green: #3dd68c;
   --red: #e05555;
+}
+
+[data-theme="light"] {
+  --bg-deep: #f2f1f8;
+  --bg-panel: #ffffff;
+  --bg-card: #f8f7fc;
+  --bg-elevated: #ededf5;
+  --border: #d4d2e8;
+  --border-glow: #c0bedd;
+  --text-primary: #1a1820;
+  --text-secondary: #4a4860;
+  --text-dim: #6a6880;
+  --text-label: #3d3b58;
 }
 
 html { font-size: 16px; }
@@ -53,10 +67,6 @@ body::before {
 
 /* ─── Lang Switcher ─── */
 .lang-switcher {
-  position: fixed;
-  top: 20px;
-  right: 24px;
-  z-index: 10;
   display: flex;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -67,10 +77,9 @@ body::before {
 .lang-btn {
   padding: 7px 14px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 500;
-  letter-spacing: 0.05em;
-  color: var(--text-dim);
+  color: var(--text-label);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -163,13 +172,11 @@ body::before {
 
 .form-group label {
   display: block;
-  font-size: 0.72rem;
+  font-size: 0.9rem;
   font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--text-label);
   margin-bottom: 8px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Noto Sans SC', sans-serif;
 }
 
 .form-group input {
@@ -230,10 +237,13 @@ body::before {
 </head>
 <body>
 
-<!-- Language Switcher -->
-<div class="lang-switcher">
-  <button class="lang-btn" id="langZh" onclick="switchLang('zh')">CN</button>
-  <button class="lang-btn" id="langEn" onclick="switchLang('en')">EN</button>
+<!-- Top Bar -->
+<div style="position:fixed;top:20px;right:24px;z-index:10;display:flex;align-items:center;gap:8px;">
+  <button id="themeToggle" onclick="toggleTheme()" style="padding:7px 12px;font-family:'JetBrains Mono',monospace;font-size:0.72rem;font-weight:500;color:var(--text-label);background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all 0.3s;" title="Toggle theme">☀</button>
+  <div class="lang-switcher">
+    <button class="lang-btn" id="langZh" onclick="switchLang('zh')">CN</button>
+    <button class="lang-btn" id="langEn" onclick="switchLang('en')">EN</button>
+  </div>
 </div>
 
 <div class="auth-card">
@@ -275,6 +285,22 @@ body::before {
 </div>
 
 <script>
+// Theme
+(function(){
+  const saved = localStorage.getItem('theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', saved);
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = saved === 'dark' ? '☀' : '🌙';
+})();
+
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+  document.getElementById('themeToggle').textContent = next === 'dark' ? '☀' : '🌙';
+}
+
 const MODE = "{{ mode }}";
 
 const I18N = {

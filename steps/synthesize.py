@@ -9,6 +9,7 @@
 
 import asyncio
 import glob
+import json
 import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
@@ -20,10 +21,12 @@ from config import (
     TTS_FIXED_RATE,
     MERGE_GAP_THRESHOLD_MS, MERGE_SHORT_THRESHOLD_MS, MERGE_MAX_DURATION_MS,
     AUDIO_SAMPLE_RATE, SEGMENT_GAP_MS,
+    TIMELINE_COMPRESS_ENABLED, TIMELINE_TAIL_MS, TIMELINE_MAX_GAP_MS,
 )
 from utils.audio import get_duration_ms, adjust_speed, truncate_with_fade
 from utils.progress import ProgressReporter
 from utils.srt import (
+    compute_compressed_timeline,
     fit_segments_to_audio,
     SubtitleSegment,
     merge_segments,
@@ -169,6 +172,7 @@ def _align_segment(seg_info: dict, aligned_dir: str) -> dict | None:
         aligned_duration_ms = actual_ms
 
     return {
+        "index": seg_info["index"],
         "path": aligned_path,
         "start_ms": seg_info["start_ms"],
         "duration_ms": aligned_duration_ms,
@@ -337,16 +341,52 @@ def synthesize(srt_path: str, work_dir: str, voice: str = TTS_VOICE_DEFAULT) -> 
             else:
                 sped_up += 1
 
-    # 8. 按实际语音时长重算字幕时间轴，再生成烧录字幕
-    aligned_durations = [
-        result["duration_ms"] if result is not None else info["target_duration_ms"]
-        for result, info in zip(results, seg_infos)
-    ]
-    subtitle_segments = fit_segments_to_audio(
-        segments,
-        aligned_durations,
-        min_gap_ms=SEGMENT_GAP_MS,
-    )
+    # 8. 时间轴压缩（去除段间停顿）— 可选
+    keep_ranges_path = os.path.join(work_dir, "keep_ranges.json")
+    if TIMELINE_COMPRESS_ENABLED and seg_infos:
+        new_positions, keep_ranges = compute_compressed_timeline(
+            seg_infos,
+            show_tail_ms=TIMELINE_TAIL_MS,
+            max_gap_ms=TIMELINE_MAX_GAP_MS,
+        )
+        idx_to_new = {p["index"]: p for p in new_positions}
+        for seg in aligned:
+            pos = idx_to_new.get(seg["index"])
+            if pos is not None:
+                seg["start_ms"] = pos["new_start_ms"]
+
+        subtitle_segments = []
+        for orig_seg, info, result in zip(segments, seg_infos, results):
+            pos = idx_to_new.get(info["index"])
+            if pos is None:
+                continue
+            dur = result["duration_ms"] if result is not None else (info.get("actual_ms") or info["target_duration_ms"])
+            subtitle_segments.append(SubtitleSegment(
+                index=orig_seg.index,
+                start_ms=pos["new_start_ms"],
+                end_ms=pos["new_start_ms"] + dur,
+                text=orig_seg.text,
+            ))
+        total_duration_ms = sum(p["kept_span_ms"] for p in new_positions)
+
+        saved_ms = (max(seg.end_ms for seg in segments) - total_duration_ms) if segments else 0
+        progress.update(f"时间轴压缩: 节省 {saved_ms/1000:.1f}s 停顿")
+        with open(keep_ranges_path, "w", encoding="utf-8") as f:
+            json.dump(keep_ranges, f)
+    else:
+        aligned_durations = [
+            result["duration_ms"] if result is not None else info["target_duration_ms"]
+            for result, info in zip(results, seg_infos)
+        ]
+        subtitle_segments = fit_segments_to_audio(
+            segments,
+            aligned_durations,
+            min_gap_ms=SEGMENT_GAP_MS,
+        )
+        total_duration_ms = max(seg.end_ms for seg in segments) if segments else 0
+        if os.path.exists(keep_ranges_path):
+            os.remove(keep_ranges_path)
+
     merged_srt_path = os.path.join(work_dir, "translated_merged.srt")
     write_srt(subtitle_segments, merged_srt_path)
     display_segments = wrap_long_segments(subtitle_segments)
@@ -356,7 +396,6 @@ def synthesize(srt_path: str, work_dir: str, voice: str = TTS_VOICE_DEFAULT) -> 
 
     # 9. 合成语音轨
     progress.update("正在合成语音轨道...")
-    total_duration_ms = max(seg.end_ms for seg in segments) if segments else 0
     voice_track_path = _mix_voice_track(aligned, work_dir, total_duration_ms)
 
     progress.done(f"{len(aligned)} 段已完成（{sped_up} 段加速，{truncated} 段截断）")
@@ -364,4 +403,5 @@ def synthesize(srt_path: str, work_dir: str, voice: str = TTS_VOICE_DEFAULT) -> 
         "voice_track": voice_track_path,
         "subtitle": display_srt_path,
         "subtitle_merged": merged_srt_path,
+        "keep_ranges_path": keep_ranges_path if TIMELINE_COMPRESS_ENABLED else None,
     }

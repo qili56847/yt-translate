@@ -55,6 +55,11 @@ MAX_SPEED_RATIO = 1.5        # audio.py 兼容用
 FADE_OUT_MS = 200            # 截断时的 fade-out 时长 (ms)
 SEGMENT_GAP_MS = 10          # 相邻段之间最小间隔 (ms)，防止音频粘连
 
+# 时间压缩（去除段间停顿，使画面与语音同步）
+TIMELINE_COMPRESS_ENABLED = True    # 启用时间压缩
+TIMELINE_TAIL_MS = 200              # 每段语音后保留的尾巴 (ms)，留呼吸感
+TIMELINE_MAX_GAP_MS = 300           # 段间最多保留的原视频转场时长 (ms)
+
 # 上传文件大小限制
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
 

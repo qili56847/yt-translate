@@ -294,3 +294,58 @@ def write_srt(segments: list[SubtitleSegment], path: str) -> None:
             f.write(f"{i}\n")
             f.write(f"{_format_timestamp(seg.start_ms)} --> {_format_timestamp(seg.end_ms)}\n")
             f.write(f"{seg.text}\n\n")
+
+
+def compute_compressed_timeline(
+    seg_infos: list[dict],
+    show_tail_ms: int = 200,
+    max_gap_ms: int = 300,
+) -> tuple[list[dict], list[tuple[int, int]]]:
+    """计算压缩后的时间轴与要保留的原视频区间。
+
+    每段的"视觉窗口" = [orig_start, orig_start + actual + show_tail_ms]，段间最多再保
+    留 max_gap_ms 的原视频作为转场缓冲。多余停顿从视频和背景音轨中切除。
+
+    参数:
+      seg_infos: 段信息列表，每项含 start_ms（原始起点）和 actual_ms（TTS 实际时长），
+                 若 actual_ms 缺失则回退到 target_duration_ms。
+    返回:
+      new_positions: [{index, new_start_ms, kept_span_ms, voice_duration_ms}, ...]
+                     每段在压缩后时间轴上的位置；kept_span_ms 是本段占用的新时间轴长度。
+      keep_ranges: [(orig_start, orig_end), ...] 原视频中要保留的区间（按时间顺序）。
+    """
+    if not seg_infos:
+        return [], []
+
+    new_positions: list[dict] = []
+    keep_ranges: list[tuple[int, int]] = []
+    cursor = 0
+
+    for i, info in enumerate(seg_infos):
+        orig_start = info["start_ms"]
+        actual = info.get("actual_ms") or info.get("target_duration_ms") or 0
+
+        right = orig_start + actual + show_tail_ms
+
+        if i < len(seg_infos) - 1:
+            next_start = seg_infos[i + 1]["start_ms"]
+            dead_time = next_start - right
+            if dead_time > 0:
+                right += min(dead_time, max_gap_ms)
+            if right > next_start:
+                right = next_start
+
+        if right <= orig_start:
+            right = orig_start + 1
+
+        kept_span = right - orig_start
+        keep_ranges.append((orig_start, right))
+        new_positions.append({
+            "index": info.get("index", i),
+            "new_start_ms": cursor,
+            "kept_span_ms": kept_span,
+            "voice_duration_ms": actual,
+        })
+        cursor += kept_span
+
+    return new_positions, keep_ranges
