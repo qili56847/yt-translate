@@ -5,6 +5,7 @@ import os
 import queue
 import threading
 import time
+import traceback
 import uuid
 
 from flask import Flask, render_template, request, jsonify, Response, send_file
@@ -91,7 +92,9 @@ def start_task():
             event_queue.put({"type": "complete", "step": "", "message": "done", "output": output_path})
             tasks[task_id]["status"] = "complete"
         except Exception as e:
-            event_queue.put({"type": "error", "step": "", "message": str(e)})
+            tb = traceback.format_exc()
+            print(f"[ERROR] {tb}", flush=True)
+            event_queue.put({"type": "error", "step": "", "message": str(e), "traceback": tb})
             tasks[task_id]["status"] = "error"
             tasks[task_id]["error"] = str(e)
         finally:
@@ -175,7 +178,9 @@ def upload_task():
             event_queue.put({"type": "complete", "step": "", "message": "done", "output": output_path})
             tasks[task_id]["status"] = "complete"
         except Exception as e:
-            event_queue.put({"type": "error", "step": "", "message": str(e)})
+            tb = traceback.format_exc()
+            print(f"[ERROR] {tb}", flush=True)
+            event_queue.put({"type": "error", "step": "", "message": str(e), "traceback": tb})
             tasks[task_id]["status"] = "error"
             tasks[task_id]["error"] = str(e)
         finally:

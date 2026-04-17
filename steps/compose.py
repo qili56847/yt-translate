@@ -1,6 +1,8 @@
 """步骤6：ffmpeg 混音 + 合成最终视频"""
 
+import os
 import subprocess
+import tempfile
 
 from config import AUDIO_SAMPLE_RATE
 from utils.progress import ProgressReporter
@@ -55,7 +57,9 @@ def compose(
             "[bg][voice]amix=inputs=2:normalize=0[a_out]"
         )
         if subtitle_path:
-            srt_escaped = subtitle_path.replace("\\", "/").replace(":", "\\:")
+            # 使用绝对路径避免 libass 路径解析问题
+            abs_srt = os.path.abspath(subtitle_path)
+            srt_escaped = abs_srt.replace("\\", "/").replace(":", "\\:")
             style = (
                 "FontSize=16,FontName=Microsoft YaHei,"
                 "PrimaryColour=&H000000FF,OutlineColour=&H00000000,"
@@ -70,20 +74,31 @@ def compose(
 
         filter_complex = ";".join(filter_parts)
 
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", video_path,
-            "-i", no_vocals_path,
-            "-i", voice_track_path,
-            "-filter_complex", filter_complex,
-            "-map", video_map,
-            "-map", "[a_out]",
-            "-c:v", "libx264", "-crf", "20", "-preset", "fast",
-            "-ar", str(AUDIO_SAMPLE_RATE),
-            "-ac", "2",
-            output_path,
-        ]
-        subprocess.run(cmd, check=True)
+        # 将 filter_complex 写入临时文件，避免 Windows 命令行长度限制
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(filter_complex)
+            filter_script = f.name
+
+        try:
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-i", no_vocals_path,
+                "-i", voice_track_path,
+                "-filter_complex_script", filter_script,
+                "-map", video_map,
+                "-map", "[a_out]",
+                "-c:v", "libx264", "-crf", "20", "-preset", "fast",
+                "-ar", str(AUDIO_SAMPLE_RATE),
+                "-ac", "2",
+                output_path,
+            ]
+            subprocess.run(cmd, check=True)
+        finally:
+            os.unlink(filter_script)
+
         progress.done(output_path)
         return output_path
 
@@ -110,8 +125,8 @@ def compose(
     progress.update("正在合成视频...")
     if subtitle_path:
         # 烧录字幕需要重编码视频
-        # Windows 路径需要转义反斜杠和冒号
-        srt_escaped = subtitle_path.replace("\\", "/").replace(":", "\\:")
+        # Windows 路径使用绝对路径并转义，供 libass 正确解析
+        srt_escaped = os.path.abspath(subtitle_path).replace("\\", "/").replace(":", "\\:")
         progress.update("正在烧录中文字幕...")
         subprocess.run(
             [
