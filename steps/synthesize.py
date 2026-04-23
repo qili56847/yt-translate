@@ -49,14 +49,13 @@ async def _generate_one_segment(
     rate: str,
     tts_dir: str,
     semaphore: asyncio.Semaphore,
-    max_retries: int = 3,
+    max_retries: int = 5,
 ) -> dict:
-    """生成单个 TTS 片段，所有段用同一个 rate"""
+    """生成单个 TTS 片段，所有段用同一个 rate。失败用指数退避重试。"""
     async with semaphore:
         seg_path = os.path.join(tts_dir, f"seg_{seg.index:04d}.mp3")
         target_duration = seg.end_ms - seg.start_ms
 
-        # 跳过已存在且非空的文件
         if os.path.exists(seg_path) and os.path.getsize(seg_path) > 0:
             return {
                 "index": seg.index,
@@ -65,6 +64,7 @@ async def _generate_one_segment(
                 "target_duration_ms": target_duration,
             }
 
+        last_err = None
         for attempt in range(max_retries):
             try:
                 communicate = edge_tts.Communicate(seg.text, voice, rate=rate)
@@ -72,11 +72,17 @@ async def _generate_one_segment(
                 if os.path.getsize(seg_path) > 0:
                     break
                 os.remove(seg_path)
-            except Exception:
+                last_err = "empty file"
+            except Exception as e:
+                last_err = f"{type(e).__name__}: {e}"
                 if os.path.exists(seg_path):
                     os.remove(seg_path)
             if attempt < max_retries - 1:
-                await asyncio.sleep(1)
+                # 指数退避: 1s, 2s, 4s, 8s
+                await asyncio.sleep(2 ** attempt)
+        else:
+            if not (os.path.exists(seg_path) and os.path.getsize(seg_path) > 0):
+                print(f"[synthesize] seg {seg.index} TTS failed after {max_retries} attempts: {last_err}", flush=True)
 
         return {
             "index": seg.index,
@@ -145,11 +151,26 @@ def _align_segment(seg_info: dict, aligned_dir: str) -> dict | None:
     index = seg_info["index"]
     actual_ms = seg_info.get("actual_ms")
     max_ms = seg_info.get("max_duration_ms", seg_info["target_duration_ms"])
-
-    if actual_ms is None:
-        return None
+    target_ms = seg_info["target_duration_ms"]
 
     aligned_path = os.path.join(aligned_dir, f"aligned_{index:04d}.wav")
+
+    # TTS 失败：生成静音占位，保持时间轴完整
+    if actual_ms is None:
+        silence_sec = max(target_ms, 100) / 1000.0
+        subprocess.run(
+            ["ffmpeg", "-y", "-f", "lavfi", "-i",
+             f"anullsrc=r={AUDIO_SAMPLE_RATE}:cl=mono",
+             "-t", f"{silence_sec}", aligned_path],
+            capture_output=True, check=True,
+        )
+        print(f"[synthesize] seg {index} 用静音占位 ({silence_sec:.2f}s)", flush=True)
+        return {
+            "index": index,
+            "path": aligned_path,
+            "start_ms": seg_info["start_ms"],
+            "duration_ms": target_ms,
+        }
 
     if actual_ms > max_ms:
         # 音频超长：加速或截断

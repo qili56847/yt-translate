@@ -246,6 +246,23 @@ def save_srt(task_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/status/<task_id>")
+@login_required
+def task_status(task_id):
+    """查询任务状态（前端刷新/重连后恢复用）"""
+    if task_id not in tasks:
+        return jsonify({"exists": False}), 404
+    task = tasks[task_id]
+    if task.get("owner") != current_user.id:
+        return jsonify({"error": "Forbidden"}), 403
+    return jsonify({
+        "exists": True,
+        "status": task.get("status"),
+        "video_id": task.get("video_id"),
+        "error": task.get("error"),
+    })
+
+
 @app.route("/api/review-continue/<task_id>", methods=["POST"])
 @login_required
 def review_continue(task_id):

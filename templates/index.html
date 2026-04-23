@@ -1294,6 +1294,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const dropZone = document.getElementById('dropZone');
   const fileInput = document.getElementById('fileInput');
 
+  // 页面加载时尝试恢复上次未完成的任务
+  tryResumeTask();
+
   dropZone.addEventListener('click', () => fileInput.click());
 
   dropZone.addEventListener('dragover', (e) => {
@@ -1432,8 +1435,19 @@ async function startFilePipeline() {
   }
 }
 
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+
 function listenEvents(taskId) {
+  localStorage.setItem('activeTaskId', taskId);
   const es = new EventSource(`/api/events/${taskId}`);
+
+  es.onopen = () => {
+    if (reconnectAttempts > 0) {
+      addLog('SSE reconnected', 'success');
+      reconnectAttempts = 0;
+    }
+  };
 
   es.onmessage = (e) => {
     const data = JSON.parse(e.data);
@@ -1461,11 +1475,13 @@ function listenEvents(taskId) {
     } else if (data.type === 'complete') {
       addLog(t('logComplete'), 'success');
       showResult(taskId);
+      localStorage.removeItem('activeTaskId');
       es.close();
       resetButton();
     } else if (data.type === 'error') {
       addLog(`${t('logError')}: ${data.message}`, 'error');
       showError(data.message);
+      localStorage.removeItem('activeTaskId');
       es.close();
       resetButton();
     }
@@ -1473,9 +1489,53 @@ function listenEvents(taskId) {
 
   es.onerror = () => {
     es.close();
-    addLog(t('logConnLost'), 'error');
-    resetButton();
+    // 任务已经被标记完成/失败的场景，不重连
+    const stored = localStorage.getItem('activeTaskId');
+    if (stored !== taskId) return;
+    // 指数退避重连（1s, 2s, 4s, 8s, 16s, 最多 5 次）
+    if (reconnectAttempts >= 5) {
+      addLog('SSE reconnect failed after 5 attempts', 'error');
+      resetButton();
+      return;
+    }
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 16000);
+    reconnectAttempts++;
+    addLog(`SSE connection lost, retry ${reconnectAttempts}/5 in ${delay/1000}s...`, 'info');
+    reconnectTimer = setTimeout(() => listenEvents(taskId), delay);
   };
+}
+
+async function tryResumeTask() {
+  const storedId = localStorage.getItem('activeTaskId');
+  if (!storedId) return;
+  try {
+    const resp = await fetch(`/api/status/${storedId}`);
+    if (!resp.ok) {
+      localStorage.removeItem('activeTaskId');
+      return;
+    }
+    const data = await resp.json();
+    if (!data.exists || data.status === 'complete' || data.status === 'error') {
+      localStorage.removeItem('activeTaskId');
+      if (data.status === 'complete') {
+        addLog(`Resumed: task ${storedId} already complete`, 'success');
+        showResult(storedId);
+      } else if (data.status === 'error') {
+        addLog(`Resumed: task ${storedId} ended with error: ${data.error || ''}`, 'error');
+      }
+      return;
+    }
+    currentTaskId = storedId;
+    addLog(`Resuming task ${storedId} (status: ${data.status})`, 'accent');
+    listenEvents(storedId);
+    if (data.status === 'reviewing') {
+      showReviewPanel(storedId);
+    }
+    const btn = document.getElementById('startBtn');
+    if (btn) btn.disabled = true;
+  } catch (e) {
+    localStorage.removeItem('activeTaskId');
+  }
 }
 
 let currentReviewTaskId = null;
