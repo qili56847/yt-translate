@@ -38,18 +38,31 @@ GPU 加速（推荐，显著加快人声分离和转录速度）：
 pip install --force-reinstall torch torchaudio --index-url https://download.pytorch.org/whl/cu126
 ```
 
-### 配置 API Key
+### 配置环境变量
 
-翻译步骤需要 OpenRouter API Key：
-
-```bash
-export OPENROUTER_API_KEY="your-api-key-here"
-```
-
-Windows PowerShell：
+**翻译（必填）：**
 
 ```powershell
-$env:OPENROUTER_API_KEY="your-api-key-here"
+# Windows PowerShell（永久生效）
+setx OPENROUTER_API_KEY "your-api-key-here"
+```
+
+**认证（必填）：** 项目使用 [Supabase](https://supabase.com) 云端数据库存储用户账号。
+
+1. 在 Supabase 创建项目，在 SQL Editor 中执行 `supabase/migrations/` 下的建表语句
+2. 在 Settings → API 获取 Project URL 和 Secret key
+
+```powershell
+setx SUPABASE_URL "https://your-project-ref.supabase.co"
+setx SUPABASE_KEY "your-secret-key"
+```
+
+**其他可选配置：**
+
+```powershell
+setx ADMIN_USERNAME "admin"       # Web UI 管理员用户名（默认 admin）
+setx ADMIN_PASSWORD "your-pass"   # Web UI 管理员密码（默认 admin，建议修改）
+setx SECRET_KEY "random-string"   # Flask session 密钥（生产环境必须修改）
 ```
 
 ## 使用
